@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil } from 'lucide-react';
+
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
+
+function Field({ label, children }: any) {
+  return (
+    <div>
+      <label className="block mb-2 text-sm font-bold text-zinc-300">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
@@ -80,7 +92,7 @@ export default function ProductsPage() {
 
       <div className="flex flex-col md:flex-row gap-4 mb-8">
         <input
-          placeholder="Pesquisar produto..."
+          placeholder="Pesquisar produto, marca ou categoria..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className={inputClass}
@@ -104,6 +116,7 @@ export default function ProductsPage() {
             <tr className="text-left text-zinc-400">
               <th className="p-5">Produto</th>
               <th className="p-5">Categoria</th>
+              <th className="p-5">Marca</th>
               <th className="p-5">Estoque</th>
               <th className="p-5">Custo</th>
               <th className="p-5">Venda</th>
@@ -117,15 +130,18 @@ export default function ProductsPage() {
               <tr key={product.id} className="border-t border-zinc-800">
                 <td className="p-5 font-bold">{product.name}</td>
                 <td className="p-5 text-zinc-400">{product.category}</td>
+                <td className="p-5 text-zinc-400">{product.brand}</td>
                 <td className="p-5">
                   {product.stock} {product.unit}
                 </td>
-                <td className="p-5 text-zinc-400">R$ {product.costPrice}</td>
+                <td className="p-5 text-zinc-400">
+                  R$ {product.costPrice}
+                </td>
                 <td className="p-5 text-yellow-400 font-bold">
                   R$ {product.salePrice}
                 </td>
                 <td className="p-5">
-                  {product.stock <= product.minimumStock ? (
+                  {Number(product.stock || 0) <= Number(product.minimumStock || 0) ? (
                     <span className="bg-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-bold">
                       Baixo
                     </span>
@@ -151,7 +167,7 @@ export default function ProductsPage() {
 
             {filteredProducts.length === 0 && (
               <tr>
-                <td className="p-5 text-zinc-500" colSpan={7}>
+                <td className="p-5 text-zinc-500" colSpan={8}>
                   Nenhum produto encontrado.
                 </td>
               </tr>
@@ -162,20 +178,87 @@ export default function ProductsPage() {
 
       {showModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
             <h2 className="text-3xl font-black text-yellow-400 mb-6">
               {editingProduct ? 'Editar Produto' : 'Novo Produto'}
             </h2>
 
             <form onSubmit={saveProduct} className="grid md:grid-cols-2 gap-4">
-              <input name="name" placeholder="Nome" defaultValue={editingProduct?.name || ''} className={inputClass} />
-              <input name="category" placeholder="Categoria" defaultValue={editingProduct?.category || ''} className={inputClass} />
-              <input name="brand" placeholder="Marca" defaultValue={editingProduct?.brand || ''} className={inputClass} />
-              <input name="unit" placeholder="Unidade" defaultValue={editingProduct?.unit || 'UNIDADE'} className={inputClass} />
-              <input name="stock" type="number" placeholder="Estoque" defaultValue={editingProduct?.stock || 0} className={inputClass} />
-              <input name="minimumStock" type="number" placeholder="Estoque mínimo" defaultValue={editingProduct?.minimumStock || 0} className={inputClass} />
-              <input name="costPrice" type="number" placeholder="Preço de custo" defaultValue={editingProduct?.costPrice || 0} className={inputClass} />
-              <input name="salePrice" type="number" placeholder="Preço de venda" defaultValue={editingProduct?.salePrice || 0} className={inputClass} />
+              <Field label="Nome do produto">
+                <input
+                  name="name"
+                  placeholder="Nome do produto"
+                  defaultValue={editingProduct?.name || ''}
+                  className={inputClass}
+                />
+              </Field>
+
+              <Field label="Marca">
+                <input
+                  name="brand"
+                  placeholder="Marca"
+                  defaultValue={editingProduct?.brand || ''}
+                  className={inputClass}
+                />
+              </Field>
+
+              <Field label="Unidade">
+                <input
+                  name="unit"
+                  placeholder="Unidade"
+                  defaultValue={editingProduct?.unit || 'UNIDADE'}
+                  className={inputClass}
+                />
+              </Field>
+
+              <Field label="Categoria">
+                <input
+                  name="category"
+                  placeholder="Categoria"
+                  defaultValue={editingProduct?.category || ''}
+                  className={inputClass}
+                />
+              </Field>
+
+              <Field label="Estoque atual">
+                <input
+                  name="stock"
+                  type="number"
+                  placeholder="Estoque atual"
+                  defaultValue={editingProduct?.stock || 0}
+                  className={inputClass}
+                />
+              </Field>
+
+              <Field label="Estoque mínimo">
+                <input
+                  name="minimumStock"
+                  type="number"
+                  placeholder="Estoque mínimo"
+                  defaultValue={editingProduct?.minimumStock || 0}
+                  className={inputClass}
+                />
+              </Field>
+
+              <Field label="Valor de compra / custo">
+                <input
+                  name="costPrice"
+                  type="number"
+                  placeholder="Valor de compra / custo"
+                  defaultValue={editingProduct?.costPrice || 0}
+                  className={inputClass}
+                />
+              </Field>
+
+              <Field label="Valor de venda">
+                <input
+                  name="salePrice"
+                  type="number"
+                  placeholder="Valor de venda"
+                  defaultValue={editingProduct?.salePrice || 0}
+                  className={inputClass}
+                />
+              </Field>
 
               <button className="md:col-span-2 bg-yellow-400 text-black rounded-2xl py-4 font-black">
                 Salvar Produto
