@@ -1,82 +1,31 @@
-import { Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
+
+function menuClass({ isActive }: any) {
+  return `rounded-2xl px-5 py-4 font-bold transition ${
+    isActive
+      ? 'bg-yellow-400 text-black'
+      : 'bg-zinc-900 text-white hover:bg-yellow-400 hover:text-black'
+  }`;
+}
 
 export default function Sidebar() {
   return (
-    <aside className="w-72 min-h-screen bg-black border-r border-zinc-800 p-6">
+    <aside className="w-72 h-screen overflow-y-auto bg-black border-r border-zinc-800 p-6 shrink-0">
       <h1 className="text-3xl font-black text-yellow-400 mb-10">
         RJ Chopp
       </h1>
 
-      <nav className="flex flex-col gap-3">
-        <Link
-          to="/"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Dashboard
-        </Link>
-
-        <Link
-          to="/produtos"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Produtos
-        </Link>
-
-        <Link
-          to="/pedidos"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Pedidos
-        </Link>
-
-        <Link
-          to="/clientes"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Clientes
-        </Link>
-
-        <Link
-          to="/financeiro"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Financeiro
-        </Link>
-
-        <Link
-          to="/despesas"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Despesas
-        </Link>
-
-        <Link
-          to="/receber"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Contas a Receber
-        </Link>
-
-        <Link
-          to="/retiradas"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Retiradas
-        </Link>
-
-        <Link
-          to="/agenda-retirada"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Agenda de Retirada
-        </Link>
-
-        <Link
-          to="/relatorios"
-          className="bg-zinc-900 hover:bg-zinc-800 rounded-2xl px-5 py-4"
-        >
-          Relatórios
-        </Link>
+      <nav className="flex flex-col gap-3 pb-10">
+        <NavLink to="/" className={menuClass}>Dashboard</NavLink>
+        <NavLink to="/produtos" className={menuClass}>Produtos</NavLink>
+        <NavLink to="/pedidos" className={menuClass}>Pedidos</NavLink>
+        <NavLink to="/clientes" className={menuClass}>Clientes</NavLink>
+        <NavLink to="/financeiro" className={menuClass}>Financeiro</NavLink>
+        <NavLink to="/despesas" className={menuClass}>Despesas</NavLink>
+        <NavLink to="/receber" className={menuClass}>Contas a Receber</NavLink>
+        <NavLink to="/retiradas" className={menuClass}>Retiradas</NavLink>
+        <NavLink to="/agenda-retirada" className={menuClass}>Agenda de Retirada</NavLink>
+        <NavLink to="/relatorios" className={menuClass}>Relatórios</NavLink>
       </nav>
     </aside>
   );
