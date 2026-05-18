@@ -44,6 +44,28 @@ function formatCompactMoney(value: any) {
   return `${sign}${formatMoney(abs)}`;
 }
 
+function getProductDisplayName(product: any) {
+  if (!product) {
+    return 'Produto';
+  }
+
+  const name = String(product.name || '').trim();
+  const brand = String(product.brand || '').trim();
+  const category = String(product.category || '').trim();
+
+  const parts = [name];
+
+  if (brand && !name.toLowerCase().includes(brand.toLowerCase())) {
+    parts.push(brand);
+  }
+
+  if (category && !name.toLowerCase().includes(category.toLowerCase())) {
+    parts.push(category);
+  }
+
+  return parts.filter(Boolean).join(' - ');
+}
+
 function getMonthKey(value: any) {
   if (!value) {
     return '';
@@ -306,21 +328,25 @@ export default function ReportsPage() {
           item.product ||
           products.find((productItem) => productItem.id === item.productId);
 
-        const productName =
-          product?.name ||
-          item.product?.name ||
-          item.productId ||
-          'Produto';
+        const productName = getProductDisplayName(product);
 
         const category =
           product?.category ||
           item.product?.category ||
           'Sem categoria';
 
-        if (!map[productName]) {
-          map[productName] = {
+        const brand =
+          product?.brand ||
+          item.product?.brand ||
+          '';
+
+        const mapKey = `${productName}-${category}-${brand}`;
+
+        if (!map[mapKey]) {
+          map[mapKey] = {
             name: productName,
             category,
+            brand,
             quantity: 0,
             total: 0,
           };
@@ -330,8 +356,8 @@ export default function ReportsPage() {
         const unitPrice = Number(item.unitPrice || item.price || product?.salePrice || 0);
         const total = Number(item.total || quantity * unitPrice);
 
-        map[productName].quantity += quantity;
-        map[productName].total += total;
+        map[mapKey].quantity += quantity;
+        map[mapKey].total += total;
       });
     });
 
@@ -992,7 +1018,7 @@ export default function ReportsPage() {
               {lowStockProducts.length > 0 ? (
                 lowStockProducts.map((product: any) => (
                   <tr key={product.id}>
-                    <td className="p-3 border border-zinc-300">{product.name}</td>
+                    <td className="p-3 border border-zinc-300">{getProductDisplayName(product)}</td>
                     <td className="p-3 border border-zinc-300">{product.category || '-'}</td>
                     <td className="p-3 border border-zinc-300">
                       {product.stock} {product.unit}
