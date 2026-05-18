@@ -3,7 +3,6 @@ import { Plus, Trash2 } from 'lucide-react';
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import Card from '../components/Card';
 import { api } from '../services/api';
 
 const inputClass =
@@ -16,6 +15,22 @@ function formatMoney(value: any) {
   }).format(Number(value || 0));
 }
 
+function formatCompactMoney(value: any) {
+  const number = Number(value || 0);
+  const abs = Math.abs(number);
+  const sign = number < 0 ? '- ' : '';
+
+  if (abs >= 1000000) {
+    return `${sign}R$ ${(abs / 1000000).toFixed(1).replace('.', ',')} mi`;
+  }
+
+  if (abs >= 1000) {
+    return `${sign}R$ ${(abs / 1000).toFixed(1).replace('.', ',')} mil`;
+  }
+
+  return `${sign}${formatMoney(abs)}`;
+}
+
 function formatDate(value: any) {
   if (!value) {
     return '-';
@@ -24,12 +39,31 @@ function formatDate(value: any) {
   return new Date(value).toLocaleString('pt-BR');
 }
 
+function FinancialCard({ title, value, fullValue }: any) {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 min-h-[130px] flex flex-col justify-between overflow-hidden">
+      <p className="text-zinc-300 font-bold text-sm md:text-base">
+        {title}
+      </p>
+
+      <div>
+        <p className="font-black text-white leading-none text-2xl md:text-3xl">
+          {value}
+        </p>
+
+        {fullValue && (
+          <p className="text-xs text-zinc-500 mt-3 truncate">
+            {fullValue}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function FinancialPage() {
   const [financial, setFinancial] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [launchMode, setLaunchMode] = useState('FINANCIAL');
-  const [selectedProductId, setSelectedProductId] = useState('');
   const [loading, setLoading] = useState(false);
 
   function getToken() {
@@ -58,30 +92,9 @@ export default function FinancialPage() {
     }
   }
 
-  async function loadProducts() {
-    try {
-      const response = await api.get('/products', authHeaders());
-      setProducts(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.log('Erro ao carregar produtos:', error);
-      setProducts([]);
-    }
-  }
-
-  async function loadData() {
-    await Promise.all([
-      loadFinancial(),
-      loadProducts(),
-    ]);
-  }
-
   useEffect(() => {
-    loadData();
+    loadFinancial();
   }, []);
-
-  function getSelectedProduct() {
-    return products.find((product) => product.id === selectedProductId);
-  }
 
   async function saveFinancial(event: any) {
     event.preventDefault();
@@ -90,62 +103,6 @@ export default function FinancialPage() {
       setLoading(true);
 
       const form = new FormData(event.currentTarget);
-
-      if (launchMode === 'PRODUCT_ENTRY') {
-        const productId = String(form.get('productId') || '');
-        const quantity = Number(form.get('quantity') || 0);
-        const amount = Number(form.get('amount') || 0);
-        const note = String(form.get('note') || '');
-
-        const product = products.find((item) => item.id === productId);
-
-        if (!productId) {
-          alert('Selecione um produto.');
-          return;
-        }
-
-        if (quantity <= 0) {
-          alert('Coloque uma quantidade maior que zero.');
-          return;
-        }
-
-        await api.post(
-          '/stock-movements',
-          {
-            productId,
-            type: 'ENTRY',
-            quantity,
-            note:
-              note ||
-              `Entrada de estoque pelo financeiro: ${product?.name || 'Produto'}`,
-          },
-          authHeaders()
-        );
-
-        if (amount > 0) {
-          await api.post(
-            '/financial-transactions',
-            {
-              type: 'OUTPUT',
-              category: 'Compra de estoque',
-              description:
-                note ||
-                `Compra de estoque: ${quantity} ${product?.unit || ''} - ${product?.name || 'Produto'}`,
-              amount,
-            },
-            authHeaders()
-          );
-        }
-
-        setShowModal(false);
-        setLaunchMode('FINANCIAL');
-        setSelectedProductId('');
-
-        await loadData();
-
-        alert('Entrada de produto lançada no estoque com sucesso.');
-        return;
-      }
 
       const data = {
         description: String(form.get('description') || ''),
@@ -174,7 +131,7 @@ export default function FinancialPage() {
       await loadFinancial();
     } catch (error) {
       console.log('Erro ao salvar lançamento:', error);
-      alert('Não foi possível salvar o lançamento.');
+      alert('Não foi possível salvar o lançamento financeiro.');
     } finally {
       setLoading(false);
     }
@@ -232,8 +189,6 @@ export default function FinancialPage() {
     };
   }, [financial]);
 
-  const selectedProduct = getSelectedProduct();
-
   return (
     <Layout>
       <PageHeader
@@ -242,29 +197,28 @@ export default function FinancialPage() {
       />
 
       <div className="grid md:grid-cols-3 gap-6 mb-8">
-        <Card
+        <FinancialCard
           title="Entradas"
-          value={formatMoney(totals.entries)}
+          value={formatCompactMoney(totals.entries)}
+          fullValue={formatMoney(totals.entries)}
         />
 
-        <Card
+        <FinancialCard
           title="Saídas"
-          value={formatMoney(totals.outputs)}
+          value={formatCompactMoney(totals.outputs)}
+          fullValue={formatMoney(totals.outputs)}
         />
 
-        <Card
+        <FinancialCard
           title="Lucro"
-          value={formatMoney(totals.profit)}
+          value={formatCompactMoney(totals.profit)}
+          fullValue={formatMoney(totals.profit)}
         />
       </div>
 
       <div className="flex justify-end mb-8">
         <button
-          onClick={() => {
-            setLaunchMode('FINANCIAL');
-            setSelectedProductId('');
-            setShowModal(true);
-          }}
+          onClick={() => setShowModal(true)}
           className="bg-yellow-400 text-black rounded-2xl px-6 py-3 font-black flex items-center gap-2"
         >
           <Plus size={20} />
@@ -362,140 +316,38 @@ export default function FinancialPage() {
               onSubmit={saveFinancial}
               className="space-y-4"
             >
+              <input
+                name="description"
+                placeholder="Descrição"
+                className={inputClass}
+              />
+
+              <input
+                name="category"
+                placeholder="Categoria"
+                className={inputClass}
+              />
+
+              <input
+                type="number"
+                step="0.01"
+                name="amount"
+                placeholder="Valor"
+                className={inputClass}
+              />
+
               <select
-                value={launchMode}
-                onChange={(event) => {
-                  setLaunchMode(event.target.value);
-                  setSelectedProductId('');
-                }}
+                name="type"
                 className={inputClass}
               >
-                <option value="FINANCIAL">
-                  Lançamento financeiro normal
+                <option value="ENTRY">
+                  Entrada
                 </option>
 
-                <option value="PRODUCT_ENTRY">
-                  Entrada de produto no estoque
+                <option value="OUTPUT">
+                  Saída
                 </option>
               </select>
-
-              {launchMode === 'FINANCIAL' && (
-                <>
-                  <input
-                    name="description"
-                    placeholder="Descrição"
-                    className={inputClass}
-                  />
-
-                  <input
-                    name="category"
-                    placeholder="Categoria"
-                    className={inputClass}
-                  />
-
-                  <input
-                    type="number"
-                    step="0.01"
-                    name="amount"
-                    placeholder="Valor"
-                    className={inputClass}
-                  />
-
-                  <select
-                    name="type"
-                    className={inputClass}
-                  >
-                    <option value="ENTRY">
-                      Entrada
-                    </option>
-
-                    <option value="OUTPUT">
-                      Saída
-                    </option>
-                  </select>
-                </>
-              )}
-
-              {launchMode === 'PRODUCT_ENTRY' && (
-                <>
-                  <select
-                    name="productId"
-                    value={selectedProductId}
-                    onChange={(event) => setSelectedProductId(event.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">
-                      Selecione o produto que vai entrar no estoque
-                    </option>
-
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name} — Estoque atual: {product.stock} {product.unit}
-                      </option>
-                    ))}
-                  </select>
-
-                  {selectedProduct && (
-                    <div className="bg-black border border-zinc-800 rounded-2xl p-5">
-                      <p className="text-zinc-400 font-bold mb-2">
-                        Produto selecionado
-                      </p>
-
-                      <div className="grid md:grid-cols-2 gap-4 text-sm">
-                        <p>
-                          <strong>Nome:</strong> {selectedProduct.name}
-                        </p>
-
-                        <p>
-                          <strong>Marca:</strong> {selectedProduct.brand || '-'}
-                        </p>
-
-                        <p>
-                          <strong>Categoria:</strong> {selectedProduct.category || '-'}
-                        </p>
-
-                        <p>
-                          <strong>Unidade:</strong> {selectedProduct.unit || '-'}
-                        </p>
-
-                        <p>
-                          <strong>Estoque atual:</strong> {selectedProduct.stock} {selectedProduct.unit}
-                        </p>
-
-                        <p>
-                          <strong>Valor de venda:</strong> {formatMoney(selectedProduct.salePrice)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <input
-                    type="number"
-                    name="quantity"
-                    placeholder="Quantidade que está entrando no estoque"
-                    className={inputClass}
-                  />
-
-                  <input
-                    type="number"
-                    step="0.01"
-                    name="amount"
-                    placeholder="Valor total pago nessa compra"
-                    className={inputClass}
-                  />
-
-                  <input
-                    name="note"
-                    placeholder="Observação. Ex: Compra de 10 barris Pilsen"
-                    className={inputClass}
-                  />
-
-                  <div className="bg-yellow-400/10 border border-yellow-400/30 rounded-2xl p-4 text-yellow-300 text-sm font-bold">
-                    Esse lançamento vai aumentar o estoque do produto selecionado.
-                    Se você colocar valor pago, ele também vai entrar no financeiro como saída.
-                  </div>
-                </>
-              )}
 
               <button
                 disabled={loading}
@@ -506,11 +358,7 @@ export default function FinancialPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowModal(false);
-                  setLaunchMode('FINANCIAL');
-                  setSelectedProductId('');
-                }}
+                onClick={() => setShowModal(false)}
                 className="w-full bg-zinc-800 rounded-2xl py-4 font-bold"
               >
                 Cancelar

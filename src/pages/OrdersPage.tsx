@@ -126,6 +126,28 @@ function getItemUnitPrice(item: any) {
   return 0;
 }
 
+function getProductDisplayName(product: any) {
+  if (!product) {
+    return 'Produto';
+  }
+
+  const name = String(product.name || '').trim();
+  const brand = String(product.brand || '').trim();
+  const category = String(product.category || '').trim();
+
+  const parts = [name];
+
+  if (brand && !name.toLowerCase().includes(brand.toLowerCase())) {
+    parts.push(brand);
+  }
+
+  if (category && !name.toLowerCase().includes(category.toLowerCase())) {
+    parts.push(category);
+  }
+
+  return parts.filter(Boolean).join(' - ');
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -244,6 +266,7 @@ export default function OrdersPage() {
   const filteredOrders = orders.filter((order) => {
     const meta = getOrderMeta(order.id);
     const text = search.toLowerCase();
+    const orderStatus = String(order.status || '').toUpperCase();
 
     const matchesSearch =
       !text ||
@@ -254,9 +277,21 @@ export default function OrdersPage() {
       order.status?.toLowerCase().includes(text) ||
       meta.returnItems?.toLowerCase().includes(text);
 
+    const deliveredAndWaitingPickup = orderStatus === 'APPROVED';
+
+    const shouldHideDeliveredFromOrders =
+      !statusFilter &&
+      !returnFilter &&
+      !text &&
+      deliveredAndWaitingPickup;
+
+    if (shouldHideDeliveredFromOrders) {
+      return false;
+    }
+
     const matchesStatus =
       !statusFilter ||
-      String(order.status || '').toUpperCase() === statusFilter;
+      orderStatus === statusFilter;
 
     const matchesPayment =
       !paymentFilter ||
@@ -268,7 +303,7 @@ export default function OrdersPage() {
       (returnFilter === 'ATRASADO' &&
         meta.pickupDate &&
         meta.pickupDate < today &&
-        String(order.status || '').toUpperCase() !== 'FINISHED') ||
+        orderStatus !== 'FINISHED') ||
       (returnFilter === 'AGENDADO' &&
         meta.pickupDate &&
         meta.pickupDate > today);
@@ -335,11 +370,11 @@ export default function OrdersPage() {
   }
 
   function getProductName(item: any) {
-    return (
-      item.product?.name ||
-      products.find((product) => product.id === item.productId)?.name ||
-      'Produto'
-    );
+    const product =
+      item.product ||
+      products.find((productItem) => productItem.id === item.productId);
+
+    return getProductDisplayName(product);
   }
 
   async function saveOrder(event: any) {
@@ -738,7 +773,7 @@ export default function OrdersPage() {
       <div className="no-print">
         <PageHeader
           title="Pedidos"
-          description="Controle de pedidos, entregas e retiradas"
+          description="Pedidos em aberto. Depois de entregue, o pedido vai para Retiradas"
         />
 
         <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -764,9 +799,9 @@ export default function OrdersPage() {
             onChange={(event) => setStatusFilter(event.target.value)}
             className={inputClass}
           >
-            <option value="">Todos os status</option>
+            <option value="">Pedidos em aberto</option>
             <option value="PENDING">Pendente</option>
-            <option value="APPROVED">Entregue</option>
+            <option value="APPROVED">Entregue / em retirada</option>
             <option value="FINISHED">Finalizado</option>
             <option value="CANCELLED">Cancelado</option>
           </select>
@@ -1038,7 +1073,7 @@ export default function OrdersPage() {
 
                         {products.map((productItem) => (
                           <option key={productItem.id} value={productItem.id}>
-                            {productItem.name} - {formatMoney(productItem.salePrice)}
+                            {getProductDisplayName(productItem)} - {formatMoney(productItem.salePrice)}
                           </option>
                         ))}
                       </select>
