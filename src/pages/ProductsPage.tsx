@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
@@ -19,11 +19,19 @@ function Field({ label, children }: any) {
   );
 }
 
+function formatMoney(value: any) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(Number(value || 0));
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   function getToken() {
     return localStorage.getItem('token');
@@ -38,8 +46,13 @@ export default function ProductsPage() {
   }
 
   async function loadProducts() {
-    const response = await api.get('/products', authHeaders());
-    setProducts(response.data);
+    try {
+      const response = await api.get('/products', authHeaders());
+      setProducts(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log('Erro ao carregar produtos:', error);
+      setProducts([]);
+    }
   }
 
   useEffect(() => {
@@ -49,28 +62,69 @@ export default function ProductsPage() {
   async function saveProduct(event: any) {
     event.preventDefault();
 
-    const form = new FormData(event.currentTarget);
+    try {
+      setLoading(true);
 
-    const data = {
-      name: String(form.get('name')),
-      category: String(form.get('category')),
-      brand: String(form.get('brand')),
-      unit: String(form.get('unit')),
-      stock: Number(form.get('stock')),
-      minimumStock: Number(form.get('minimumStock')),
-      costPrice: Number(form.get('costPrice')),
-      salePrice: Number(form.get('salePrice')),
-    };
+      const form = new FormData(event.currentTarget);
 
-    if (editingProduct) {
-      await api.put(`/products/${editingProduct.id}`, data, authHeaders());
-    } else {
-      await api.post('/products', data, authHeaders());
+      const data = {
+        name: String(form.get('name') || ''),
+        category: String(form.get('category') || ''),
+        brand: String(form.get('brand') || ''),
+        unit: String(form.get('unit') || ''),
+        stock: Number(form.get('stock') || 0),
+        minimumStock: Number(form.get('minimumStock') || 0),
+        costPrice: Number(form.get('costPrice') || 0),
+        salePrice: Number(form.get('salePrice') || 0),
+      };
+
+      if (!data.name.trim()) {
+        alert('Coloque o nome do produto.');
+        return;
+      }
+
+      if (editingProduct) {
+        await api.put(`/products/${editingProduct.id}`, data, authHeaders());
+      } else {
+        await api.post('/products', data, authHeaders());
+      }
+
+      setShowModal(false);
+      setEditingProduct(null);
+      await loadProducts();
+    } catch (error) {
+      console.log('Erro ao salvar produto:', error);
+      alert('Não foi possível salvar o produto.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteProduct(product: any) {
+    const confirmDelete = window.confirm(
+      `Tem certeza que deseja apagar o produto "${product.name}"?\n\nEssa ação não tem como desfazer.`
+    );
+
+    if (!confirmDelete) {
+      return;
     }
 
-    setShowModal(false);
-    setEditingProduct(null);
-    loadProducts();
+    try {
+      setLoading(true);
+
+      await api.delete(`/products/${product.id}`, authHeaders());
+
+      await loadProducts();
+
+      alert('Produto apagado com sucesso.');
+    } catch (error) {
+      console.log('Erro ao apagar produto:', error);
+      alert(
+        'Não foi possível apagar esse produto. Se ele estiver dentro de algum pedido, primeiro apague o pedido ou deixe esse produto sem apagar.'
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   const filteredProducts = products.filter((product) => {
@@ -111,7 +165,7 @@ export default function ProductsPage() {
       </div>
 
       <div className="bg-zinc-900 rounded-3xl border border-zinc-800 overflow-x-auto">
-        <table className="w-full min-w-[850px]">
+        <table className="w-full min-w-[950px]">
           <thead className="bg-black">
             <tr className="text-left text-zinc-400">
               <th className="p-5">Produto</th>
@@ -129,17 +183,27 @@ export default function ProductsPage() {
             {filteredProducts.map((product) => (
               <tr key={product.id} className="border-t border-zinc-800">
                 <td className="p-5 font-bold">{product.name}</td>
-                <td className="p-5 text-zinc-400">{product.category}</td>
-                <td className="p-5 text-zinc-400">{product.brand}</td>
+
+                <td className="p-5 text-zinc-400">
+                  {product.category || '-'}
+                </td>
+
+                <td className="p-5 text-zinc-400">
+                  {product.brand || '-'}
+                </td>
+
                 <td className="p-5">
                   {product.stock} {product.unit}
                 </td>
+
                 <td className="p-5 text-zinc-400">
-                  R$ {product.costPrice}
+                  {formatMoney(product.costPrice)}
                 </td>
+
                 <td className="p-5 text-yellow-400 font-bold">
-                  R$ {product.salePrice}
+                  {formatMoney(product.salePrice)}
                 </td>
+
                 <td className="p-5">
                   {Number(product.stock || 0) <= Number(product.minimumStock || 0) ? (
                     <span className="bg-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-bold">
@@ -151,16 +215,28 @@ export default function ProductsPage() {
                     </span>
                   )}
                 </td>
+
                 <td className="p-5">
-                  <button
-                    onClick={() => {
-                      setEditingProduct(product);
-                      setShowModal(true);
-                    }}
-                    className="bg-zinc-800 hover:bg-zinc-700 p-3 rounded-xl"
-                  >
-                    <Pencil size={18} />
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingProduct(product);
+                        setShowModal(true);
+                      }}
+                      className="bg-zinc-800 hover:bg-zinc-700 p-3 rounded-xl"
+                      title="Editar produto"
+                    >
+                      <Pencil size={18} />
+                    </button>
+
+                    <button
+                      onClick={() => deleteProduct(product)}
+                      className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white p-3 rounded-xl"
+                      title="Apagar produto"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -244,6 +320,7 @@ export default function ProductsPage() {
                 <input
                   name="costPrice"
                   type="number"
+                  step="0.01"
                   placeholder="Valor de compra / custo"
                   defaultValue={editingProduct?.costPrice || 0}
                   className={inputClass}
@@ -254,14 +331,18 @@ export default function ProductsPage() {
                 <input
                   name="salePrice"
                   type="number"
+                  step="0.01"
                   placeholder="Valor de venda"
                   defaultValue={editingProduct?.salePrice || 0}
                   className={inputClass}
                 />
               </Field>
 
-              <button className="md:col-span-2 bg-yellow-400 text-black rounded-2xl py-4 font-black">
-                Salvar Produto
+              <button
+                disabled={loading}
+                className="md:col-span-2 bg-yellow-400 text-black rounded-2xl py-4 font-black disabled:opacity-50"
+              >
+                {loading ? 'Salvando...' : 'Salvar Produto'}
               </button>
 
               <button
