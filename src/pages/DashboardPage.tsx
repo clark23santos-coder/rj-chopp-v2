@@ -22,20 +22,44 @@ function formatMoney(value: number) {
   }).format(value || 0);
 }
 
-function DashboardCard({ title, value, money = false }: any) {
+function formatCompactMoney(value: number) {
+  const number = Number(value || 0);
+  const abs = Math.abs(number);
+  const sign = number < 0 ? '- ' : '';
+
+  if (abs >= 1000000) {
+    return `${sign}R$ ${(abs / 1000000).toFixed(1).replace('.', ',')} mi`;
+  }
+
+  if (abs >= 1000) {
+    return `${sign}R$ ${(abs / 1000).toFixed(1).replace('.', ',')} mil`;
+  }
+
+  return `${sign}${formatMoney(abs)}`;
+}
+
+function DashboardCard({ title, value, money = false, fullValue }: any) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 min-h-[140px] flex flex-col justify-between overflow-hidden">
-      <p className="text-zinc-300 font-bold text-base">
+    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 min-h-[130px] flex flex-col justify-between overflow-hidden">
+      <p className="text-zinc-300 font-bold text-sm md:text-base">
         {title}
       </p>
 
-      <p
-        className={`font-black text-white leading-tight break-words ${
-          money ? 'text-3xl md:text-4xl' : 'text-5xl'
-        }`}
-      >
-        {value}
-      </p>
+      <div>
+        <p
+          className={`font-black text-white leading-none ${
+            money ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'
+          }`}
+        >
+          {value}
+        </p>
+
+        {money && fullValue && (
+          <p className="text-xs text-zinc-500 mt-3 truncate">
+            {fullValue}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -185,25 +209,29 @@ export default function DashboardPage() {
       <div className="grid md:grid-cols-4 gap-6 mb-8">
         <DashboardCard
           title="Receita"
-          value={formatMoney(totals.revenue)}
+          value={formatCompactMoney(totals.revenue)}
+          fullValue={formatMoney(totals.revenue)}
           money
         />
 
         <DashboardCard
           title="Despesas"
-          value={formatMoney(totals.expenses)}
+          value={formatCompactMoney(totals.expenses)}
+          fullValue={formatMoney(totals.expenses)}
           money
         />
 
         <DashboardCard
           title="Lucro"
-          value={formatMoney(totals.profit)}
+          value={formatCompactMoney(totals.profit)}
+          fullValue={formatMoney(totals.profit)}
           money
         />
 
         <DashboardCard
           title="Fiado"
-          value={formatMoney(totals.receivable)}
+          value={formatCompactMoney(totals.receivable)}
+          fullValue={formatMoney(totals.receivable)}
           money
         />
       </div>
