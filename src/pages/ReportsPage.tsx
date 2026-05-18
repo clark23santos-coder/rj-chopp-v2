@@ -2,14 +2,71 @@ import { useEffect, useMemo, useState } from 'react';
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import Card from '../components/Card';
 import { api } from '../services/api';
+
+function formatMoney(value: any) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(Number(value || 0));
+}
+
+function formatDate(value: any) {
+  if (!value) {
+    return '-';
+  }
+
+  return new Date(value).toLocaleString('pt-BR');
+}
+
+function formatCompactMoney(value: any) {
+  const number = Number(value || 0);
+  const abs = Math.abs(number);
+  const sign = number < 0 ? '- ' : '';
+
+  if (abs >= 1000000) {
+    return `${sign}R$ ${(abs / 1000000).toFixed(1).replace('.', ',')} mi`;
+  }
+
+  if (abs >= 1000) {
+    return `${sign}R$ ${(abs / 1000).toFixed(1).replace('.', ',')} mil`;
+  }
+
+  return `${sign}${formatMoney(abs)}`;
+}
+
+function ReportCard({ title, value, fullValue, money = false }: any) {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 min-h-[130px] flex flex-col justify-between overflow-hidden">
+      <p className="text-zinc-300 font-bold text-sm md:text-base">
+        {title}
+      </p>
+
+      <div>
+        <p
+          className={`font-black text-white leading-none ${
+            money ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'
+          }`}
+        >
+          {value}
+        </p>
+
+        {money && fullValue && (
+          <p className="text-xs text-zinc-500 mt-3 truncate">
+            {fullValue}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [financial, setFinancial] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   function getToken() {
     return localStorage.getItem('token');
@@ -24,22 +81,35 @@ export default function ReportsPage() {
   }
 
   async function loadData() {
-    const [
-      ordersResponse,
-      financialResponse,
-      productsResponse,
-      clientsResponse,
-    ] = await Promise.all([
-      api.get('/orders', authHeaders()),
-      api.get('/financial', authHeaders()),
-      api.get('/products', authHeaders()),
-      api.get('/clients', authHeaders()),
-    ]);
+    try {
+      setLoading(true);
 
-    setOrders(ordersResponse.data);
-    setFinancial(financialResponse.data);
-    setProducts(productsResponse.data);
-    setClients(clientsResponse.data);
+      const [
+        ordersResponse,
+        financialResponse,
+        productsResponse,
+        clientsResponse,
+      ] = await Promise.all([
+        api.get('/orders', authHeaders()),
+        api.get('/financial-transactions', authHeaders()),
+        api.get('/products', authHeaders()),
+        api.get('/clients', authHeaders()),
+      ]);
+
+      setOrders(Array.isArray(ordersResponse.data) ? ordersResponse.data : []);
+      setFinancial(Array.isArray(financialResponse.data) ? financialResponse.data : []);
+      setProducts(Array.isArray(productsResponse.data) ? productsResponse.data : []);
+      setClients(Array.isArray(clientsResponse.data) ? clientsResponse.data : []);
+    } catch (error) {
+      console.log('Erro ao carregar relatórios:', error);
+
+      setOrders([]);
+      setFinancial([]);
+      setProducts([]);
+      setClients([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -47,30 +117,35 @@ export default function ReportsPage() {
   }, []);
 
   const totals = useMemo(() => {
-    const revenue = orders.reduce(
-      (total, order) => total + Number(order.total || 0),
-      0
-    );
+    const revenue = financial
+      .filter((item) => item.type === 'ENTRY')
+      .reduce((total, item) => total + Number(item.amount || 0), 0);
 
     const expenses = financial
       .filter((item) => item.type === 'OUTPUT')
       .reduce((total, item) => total + Number(item.amount || 0), 0);
 
     const receivable = orders
-      .filter(
-        (order) =>
-          order.paymentMethod === 'FIADO' &&
-          order.status !== 'PAGO'
-      )
+      .filter((order) => {
+        const payment = String(order.paymentMethod || '').toUpperCase();
+        const status = String(order.status || '').toUpperCase();
+
+        return payment.includes('FIADO') && status !== 'FINISHED' && status !== 'CANCELED';
+      })
       .reduce((total, order) => total + Number(order.total || 0), 0);
+
+    const lowStock = products.filter((product) => {
+      return Number(product.stock || 0) <= Number(product.minimumStock || 0);
+    }).length;
 
     return {
       revenue,
       expenses,
       receivable,
       profit: revenue - expenses,
+      lowStock,
     };
-  }, [orders, financial]);
+  }, [orders, financial, products]);
 
   const soldProducts = useMemo(() => {
     const map: any = {};
@@ -79,7 +154,7 @@ export default function ReportsPage() {
       order.items?.forEach((item: any) => {
         const product =
           item.product ||
-          products.find((product) => product.id === item.productId);
+          products.find((productItem) => productItem.id === item.productId);
 
         const productName =
           product?.name ||
@@ -101,16 +176,16 @@ export default function ReportsPage() {
           };
         }
 
-        map[productName].quantity += Number(item.quantity || 0);
-        map[productName].total += Number(
-          item.total ||
-            Number(item.quantity || 0) *
-              Number(item.unitPrice || product?.salePrice || 0)
-        );
+        const quantity = Number(item.quantity || 0);
+        const unitPrice = Number(item.unitPrice || item.price || product?.salePrice || 0);
+        const total = Number(item.total || quantity * unitPrice);
+
+        map[productName].quantity += quantity;
+        map[productName].total += total;
       });
     });
 
-    return Object.values(map);
+    return Object.values(map).sort((a: any, b: any) => b.total - a.total);
   }, [orders, products]);
 
   const barrelProducts = useMemo(() => {
@@ -148,6 +223,18 @@ export default function ReportsPage() {
     return financial.filter((item) => item.type === 'OUTPUT');
   }, [financial]);
 
+  const entries = useMemo(() => {
+    return financial.filter((item) => item.type === 'ENTRY');
+  }, [financial]);
+
+  const lowStockProducts = useMemo(() => {
+    return products.filter((product) => {
+      return Number(product.stock || 0) <= Number(product.minimumStock || 0);
+    });
+  }, [products]);
+
+  const recentOrders = orders.slice(0, 10);
+
   function printReport() {
     window.print();
   }
@@ -177,6 +264,7 @@ export default function ReportsPage() {
               color: black !important;
               display: block !important;
               min-height: auto !important;
+              padding: 0 !important;
             }
 
             #print-report {
@@ -188,6 +276,8 @@ export default function ReportsPage() {
               width: 100% !important;
               font-size: 10px !important;
               line-height: 1.15 !important;
+              box-shadow: none !important;
+              border-radius: 0 !important;
             }
 
             #print-report h1 {
@@ -239,6 +329,14 @@ export default function ReportsPage() {
           description="Relatórios financeiros e operacionais"
         />
 
+        {loading && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 mb-8">
+            <p className="text-zinc-400 font-bold">
+              Carregando relatórios...
+            </p>
+          </div>
+        )}
+
         <div className="flex justify-end mb-8">
           <button
             onClick={printReport}
@@ -249,10 +347,40 @@ export default function ReportsPage() {
         </div>
 
         <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <Card title="Receita" value={`R$ ${totals.revenue}`} />
-          <Card title="Despesas" value={`R$ ${totals.expenses}`} />
-          <Card title="Lucro" value={`R$ ${totals.profit}`} />
-          <Card title="Fiado" value={`R$ ${totals.receivable}`} />
+          <ReportCard
+            title="Receita"
+            value={formatCompactMoney(totals.revenue)}
+            fullValue={formatMoney(totals.revenue)}
+            money
+          />
+
+          <ReportCard
+            title="Despesas"
+            value={formatCompactMoney(totals.expenses)}
+            fullValue={formatMoney(totals.expenses)}
+            money
+          />
+
+          <ReportCard
+            title="Lucro"
+            value={formatCompactMoney(totals.profit)}
+            fullValue={formatMoney(totals.profit)}
+            money
+          />
+
+          <ReportCard
+            title="Fiado"
+            value={formatCompactMoney(totals.receivable)}
+            fullValue={formatMoney(totals.receivable)}
+            money
+          />
+        </div>
+
+        <div className="grid md:grid-cols-4 gap-6 mb-8">
+          <ReportCard title="Pedidos" value={orders.length} />
+          <ReportCard title="Clientes" value={clients.length} />
+          <ReportCard title="Produtos" value={products.length} />
+          <ReportCard title="Estoque baixo" value={totals.lowStock} />
         </div>
       </div>
 
@@ -280,22 +408,22 @@ export default function ReportsPage() {
         <div className="print-grid grid md:grid-cols-4 gap-4 mb-6">
           <div className="print-card border border-zinc-300 rounded-2xl p-4">
             <p className="text-zinc-500 font-bold">Receita</p>
-            <p className="text-2xl font-black">R$ {totals.revenue}</p>
+            <p className="text-2xl font-black">{formatMoney(totals.revenue)}</p>
           </div>
 
           <div className="print-card border border-zinc-300 rounded-2xl p-4">
             <p className="text-zinc-500 font-bold">Despesas</p>
-            <p className="text-2xl font-black">R$ {totals.expenses}</p>
+            <p className="text-2xl font-black">{formatMoney(totals.expenses)}</p>
           </div>
 
           <div className="print-card border border-zinc-300 rounded-2xl p-4">
             <p className="text-zinc-500 font-bold">Lucro estimado</p>
-            <p className="text-2xl font-black">R$ {totals.profit}</p>
+            <p className="text-2xl font-black">{formatMoney(totals.profit)}</p>
           </div>
 
           <div className="print-card border border-zinc-300 rounded-2xl p-4">
             <p className="text-zinc-500 font-bold">Fiado</p>
-            <p className="text-2xl font-black">R$ {totals.receivable}</p>
+            <p className="text-2xl font-black">{formatMoney(totals.receivable)}</p>
           </div>
         </div>
 
@@ -324,6 +452,86 @@ export default function ReportsPage() {
         </div>
 
         <div className="print-section">
+          <h2 className="text-2xl font-black mb-3">Resumo financeiro</h2>
+
+          <table className="w-full border border-zinc-300 mb-6">
+            <thead>
+              <tr className="bg-zinc-100 text-left">
+                <th className="p-3 border border-zinc-300">Tipo</th>
+                <th className="p-3 border border-zinc-300">Quantidade</th>
+                <th className="p-3 border border-zinc-300">Total</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr>
+                <td className="p-3 border border-zinc-300">Entradas</td>
+                <td className="p-3 border border-zinc-300">{entries.length}</td>
+                <td className="p-3 border border-zinc-300">{formatMoney(totals.revenue)}</td>
+              </tr>
+
+              <tr>
+                <td className="p-3 border border-zinc-300">Saídas / Despesas</td>
+                <td className="p-3 border border-zinc-300">{expenses.length}</td>
+                <td className="p-3 border border-zinc-300">{formatMoney(totals.expenses)}</td>
+              </tr>
+
+              <tr>
+                <td className="p-3 border border-zinc-300">Lucro estimado</td>
+                <td className="p-3 border border-zinc-300">-</td>
+                <td className="p-3 border border-zinc-300">{formatMoney(totals.profit)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="print-section">
+          <h2 className="text-2xl font-black mb-3">Últimos pedidos</h2>
+
+          <table className="w-full border border-zinc-300 mb-6">
+            <thead>
+              <tr className="bg-zinc-100 text-left">
+                <th className="p-3 border border-zinc-300">Cliente</th>
+                <th className="p-3 border border-zinc-300">Status</th>
+                <th className="p-3 border border-zinc-300">Pagamento</th>
+                <th className="p-3 border border-zinc-300">Total</th>
+                <th className="p-3 border border-zinc-300">Data</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {recentOrders.length > 0 ? (
+                recentOrders.map((order: any) => (
+                  <tr key={order.id}>
+                    <td className="p-3 border border-zinc-300">
+                      {order.client?.name || 'Cliente não informado'}
+                    </td>
+                    <td className="p-3 border border-zinc-300">
+                      {order.status || '-'}
+                    </td>
+                    <td className="p-3 border border-zinc-300">
+                      {order.paymentMethod || '-'}
+                    </td>
+                    <td className="p-3 border border-zinc-300">
+                      {formatMoney(order.total)}
+                    </td>
+                    <td className="p-3 border border-zinc-300">
+                      {formatDate(order.createdAt)}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="p-3 border border-zinc-300" colSpan={5}>
+                    Nenhum pedido registrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="print-section">
           <h2 className="text-2xl font-black mb-3">Barris / Chopp vendidos</h2>
 
           <table className="w-full border border-zinc-300 mb-6">
@@ -341,7 +549,7 @@ export default function ReportsPage() {
                   <tr key={item.name}>
                     <td className="p-3 border border-zinc-300">{item.name}</td>
                     <td className="p-3 border border-zinc-300">{item.quantity}</td>
-                    <td className="p-3 border border-zinc-300">R$ {item.total}</td>
+                    <td className="p-3 border border-zinc-300">{formatMoney(item.total)}</td>
                   </tr>
                 ))
               ) : (
@@ -373,7 +581,7 @@ export default function ReportsPage() {
                   <tr key={item.name}>
                     <td className="p-3 border border-zinc-300">{item.name}</td>
                     <td className="p-3 border border-zinc-300">{item.quantity}</td>
-                    <td className="p-3 border border-zinc-300">R$ {item.total}</td>
+                    <td className="p-3 border border-zinc-300">{formatMoney(item.total)}</td>
                   </tr>
                 ))
               ) : (
@@ -407,13 +615,51 @@ export default function ReportsPage() {
                     <td className="p-3 border border-zinc-300">{item.name}</td>
                     <td className="p-3 border border-zinc-300">{item.category}</td>
                     <td className="p-3 border border-zinc-300">{item.quantity}</td>
-                    <td className="p-3 border border-zinc-300">R$ {item.total}</td>
+                    <td className="p-3 border border-zinc-300">{formatMoney(item.total)}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td className="p-3 border border-zinc-300" colSpan={4}>
                     Nenhum produto vendido.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="print-section">
+          <h2 className="text-2xl font-black mb-3">Produtos com estoque baixo</h2>
+
+          <table className="w-full border border-zinc-300 mb-6">
+            <thead>
+              <tr className="bg-zinc-100 text-left">
+                <th className="p-3 border border-zinc-300">Produto</th>
+                <th className="p-3 border border-zinc-300">Categoria</th>
+                <th className="p-3 border border-zinc-300">Estoque atual</th>
+                <th className="p-3 border border-zinc-300">Estoque mínimo</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {lowStockProducts.length > 0 ? (
+                lowStockProducts.map((product: any) => (
+                  <tr key={product.id}>
+                    <td className="p-3 border border-zinc-300">{product.name}</td>
+                    <td className="p-3 border border-zinc-300">{product.category || '-'}</td>
+                    <td className="p-3 border border-zinc-300">
+                      {product.stock} {product.unit}
+                    </td>
+                    <td className="p-3 border border-zinc-300">
+                      {product.minimumStock} {product.unit}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="p-3 border border-zinc-300" colSpan={4}>
+                    Nenhum produto com estoque baixo.
                   </td>
                 </tr>
               )}
@@ -430,6 +676,7 @@ export default function ReportsPage() {
                 <th className="p-3 border border-zinc-300">Descrição</th>
                 <th className="p-3 border border-zinc-300">Categoria</th>
                 <th className="p-3 border border-zinc-300">Valor</th>
+                <th className="p-3 border border-zinc-300">Data</th>
               </tr>
             </thead>
 
@@ -439,12 +686,13 @@ export default function ReportsPage() {
                   <tr key={item.id}>
                     <td className="p-3 border border-zinc-300">{item.description}</td>
                     <td className="p-3 border border-zinc-300">{item.category}</td>
-                    <td className="p-3 border border-zinc-300">R$ {item.amount}</td>
+                    <td className="p-3 border border-zinc-300">{formatMoney(item.amount)}</td>
+                    <td className="p-3 border border-zinc-300">{formatDate(item.createdAt)}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td className="p-3 border border-zinc-300" colSpan={3}>
+                  <td className="p-3 border border-zinc-300" colSpan={4}>
                     Nenhuma despesa registrada.
                   </td>
                 </tr>
