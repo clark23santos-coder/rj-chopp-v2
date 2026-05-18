@@ -18,6 +18,7 @@ export default function Sidebar() {
       <nav className="flex flex-col gap-3 pb-20">
         <NavLink to="/" className={menuClass}>Dashboard</NavLink>
         <NavLink to="/produtos" className={menuClass}>Produtos</NavLink>
+        <NavLink to="/estoque" className={menuClass}>Estoque</NavLink>
         <NavLink to="/pedidos" className={menuClass}>Pedidos</NavLink>
         <NavLink to="/clientes" className={menuClass}>Clientes</NavLink>
         <NavLink to="/financeiro" className={menuClass}>Financeiro</NavLink>

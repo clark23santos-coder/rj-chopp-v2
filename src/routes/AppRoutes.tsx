@@ -14,6 +14,7 @@ import ReceivablesPage from '../pages/ReceivablesPage';
 import ReportsPage from '../pages/ReportsPage';
 import WithdrawalsPage from '../pages/WithdrawalsPage';
 import ReturnsPage from '../pages/ReturnsPage';
+import StockMovementsPage from '../pages/StockMovementsPage';
 
 export default function AppRoutes() {
   return (
@@ -21,6 +22,7 @@ export default function AppRoutes() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/produtos" element={<ProductsPage />} />
+        <Route path="/estoque" element={<StockMovementsPage />} />
         <Route path="/pedidos" element={<OrdersPage />} />
         <Route path="/clientes" element={<ClientsPage />} />
         <Route path="/financeiro" element={<FinancialPage />} />
