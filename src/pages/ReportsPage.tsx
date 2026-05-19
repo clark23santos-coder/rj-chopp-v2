@@ -13,6 +13,39 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
 
+const COMPANY_SETTINGS_STORAGE_KEY = 'rjchopp_company_settings';
+
+const defaultCompanySettings = {
+  companyName: 'RJ CHOPP',
+  phone: '(44) 99958-8160',
+  city: 'Loanda - Paraná',
+  address: '',
+  document: '',
+  noteMessage: 'Obrigado pela preferência.',
+  reportFooter: 'Relatório gerado pelo sistema RJ Chopp SGE',
+};
+
+function readStorage(key: string, fallback: any) {
+  try {
+    const saved = localStorage.getItem(key);
+
+    if (!saved) {
+      return fallback;
+    }
+
+    return JSON.parse(saved);
+  } catch {
+    return fallback;
+  }
+}
+
+function getCompanySettings() {
+  return {
+    ...defaultCompanySettings,
+    ...readStorage(COMPANY_SETTINGS_STORAGE_KEY, {}),
+  };
+}
+
 function formatMoney(value: any) {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -140,6 +173,8 @@ export default function ReportsPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
+
+  const companySettings = getCompanySettings();
 
   function getToken() {
     return localStorage.getItem('token');
@@ -733,21 +768,39 @@ export default function ReportsPage() {
       >
         <div className="print-header flex items-start justify-between border-b border-zinc-300 pb-3 mb-3">
           <div>
-            <h1 className="text-4xl font-black">RJ CHOPP</h1>
+            <h1 className="text-4xl font-black">
+              {companySettings.companyName || 'RJ CHOPP'}
+            </h1>
+
             <p className="font-bold text-zinc-600">
               Relatório geral de vendas e operação
             </p>
+
             <p className="text-zinc-500">
               Período: {getMonthName(selectedMonth)}
             </p>
+
             <p className="text-zinc-500">
               Gerado em {new Date().toLocaleString('pt-BR')}
             </p>
           </div>
 
           <div className="text-right">
-            <p className="font-bold">Loanda - Paraná</p>
-            <p>(44) 99958-8160</p>
+            <p className="font-bold">
+              {companySettings.city || 'Loanda - Paraná'}
+            </p>
+
+            {companySettings.phone && (
+              <p>{companySettings.phone}</p>
+            )}
+
+            {companySettings.address && (
+              <p>{companySettings.address}</p>
+            )}
+
+            {companySettings.document && (
+              <p>{companySettings.document}</p>
+            )}
           </div>
         </div>
 
@@ -1074,7 +1127,7 @@ export default function ReportsPage() {
         </div>
 
         <div className="print-footer mt-5 border-t border-zinc-300 pt-3 text-zinc-500 text-sm">
-          Relatório gerado pelo sistema RJ Chopp SGE
+          {companySettings.reportFooter || 'Relatório gerado pelo sistema RJ Chopp SGE'}
         </div>
       </div>
     </Layout>
