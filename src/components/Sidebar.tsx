@@ -26,6 +26,7 @@ export default function Sidebar() {
         <NavLink to="/receber" className={menuClass}>Contas a Receber</NavLink>
         <NavLink to="/retiradas" className={menuClass}>Retiradas</NavLink>
         <NavLink to="/relatorios" className={menuClass}>Relatórios</NavLink>
+        <NavLink to="/configuracoes" className={menuClass}>Configurações</NavLink>
       </nav>
     </aside>
   );

@@ -15,6 +15,7 @@ import ReportsPage from '../pages/ReportsPage';
 import WithdrawalsPage from '../pages/WithdrawalsPage';
 import ReturnsPage from '../pages/ReturnsPage';
 import StockMovementsPage from '../pages/StockMovementsPage';
+import SettingsPage from '../pages/SettingsPage';
 
 export default function AppRoutes() {
   return (
@@ -31,6 +32,7 @@ export default function AppRoutes() {
         <Route path="/retiradas" element={<WithdrawalsPage />} />
         <Route path="/agenda-retirada" element={<ReturnsPage />} />
         <Route path="/relatorios" element={<ReportsPage />} />
+        <Route path="/configuracoes" element={<SettingsPage />} />
       </Routes>
     </BrowserRouter>
   );
