@@ -1,0 +1,503 @@
+import { useEffect, useMemo, useState } from 'react';
+import {
+  MapPin,
+  Navigation,
+  Copy,
+  Search,
+  RefreshCcw,
+  ClipboardList,
+  Truck,
+} from 'lucide-react';
+
+import Layout from '../components/Layout';
+import PageHeader from '../components/PageHeader';
+import { api } from '../services/api';
+
+const inputClass =
+  'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
+
+const WITHDRAWALS_STORAGE_KEY = 'rjchopp_withdrawals';
+const ORDER_META_STORAGE_KEY = 'rjchopp_order_meta';
+
+function readStorage(key: string, fallback: any) {
+  try {
+    const saved = localStorage.getItem(key);
+
+    if (!saved) {
+      return fallback;
+    }
+
+    return JSON.parse(saved);
+  } catch {
+    return fallback;
+  }
+}
+
+function getCurrentUser() {
+  try {
+    const saved = localStorage.getItem('rjchopp_user');
+
+    if (!saved) {
+      return null;
+    }
+
+    return JSON.parse(saved);
+  } catch {
+    return null;
+  }
+}
+
+function getToday() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getDateKey(value: any) {
+  if (!value) {
+    return '';
+  }
+
+  if (String(value).includes('T')) {
+    return String(value).split('T')[0];
+  }
+
+  if (String(value).match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return String(value);
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return date.toISOString().split('T')[0];
+}
+
+function getOrderMeta(orderId: string) {
+  const meta = readStorage(ORDER_META_STORAGE_KEY, {});
+  return meta[orderId] || {};
+}
+
+function getFullAddress(item: any) {
+  return String(item.address || item.client?.address || '').trim();
+}
+
+function getMapsUrl(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
+function getWazeUrl(address: string) {
+  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
+}
+
+function getEmbedUrl(address: string) {
+  return `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`;
+}
+
+function getTypeConfig(type: string) {
+  if (type === 'ORDER') {
+    return {
+      label: 'Pedido',
+      icon: ClipboardList,
+      className: 'bg-yellow-400/20 text-yellow-400',
+    };
+  }
+
+  return {
+    label: 'Retirada',
+    icon: Truck,
+    className: 'bg-green-500/20 text-green-400',
+  };
+}
+
+function isOpenOrder(order: any) {
+  const status = String(order.status || '').toUpperCase();
+
+  return (
+    status === 'PENDING' ||
+    status === '' ||
+    status === 'PENDENTE'
+  );
+}
+
+function isOpenWithdrawal(withdrawal: any) {
+  const status = String(withdrawal.status || '').toUpperCase();
+
+  return (
+    status !== 'FINALIZADO' &&
+    status !== 'FINALIZADA' &&
+    status !== 'RETIRADO' &&
+    status !== 'CONCLUIDO' &&
+    status !== 'CONCLUÍDO'
+  );
+}
+
+export default function MapPage() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
+
+  const today = getToday();
+  const user = getCurrentUser();
+
+  function getToken() {
+    return localStorage.getItem('token');
+  }
+
+  function authHeaders() {
+    return {
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+      },
+    };
+  }
+
+  async function loadData() {
+    try {
+      const ordersResponse = await api.get('/orders', authHeaders());
+      const withdrawalsData = readStorage(WITHDRAWALS_STORAGE_KEY, []);
+
+      setOrders(Array.isArray(ordersResponse.data) ? ordersResponse.data : []);
+      setWithdrawals(Array.isArray(withdrawalsData) ? withdrawalsData : []);
+    } catch (error) {
+      console.log('Erro ao carregar mapa:', error);
+      setOrders([]);
+      setWithdrawals([]);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const locations = useMemo(() => {
+    const orderLocations = orders
+      .filter((order) => {
+        const meta = getOrderMeta(order.id);
+        const address = getFullAddress(order);
+
+        if (!address) {
+          return false;
+        }
+
+        if (!isOpenOrder(order)) {
+          return false;
+        }
+
+        const deliveryDate =
+          getDateKey(meta.deliveryDate) ||
+          getDateKey(order.deliveryDate) ||
+          getDateKey(order.createdAt);
+
+        return deliveryDate === today;
+      })
+      .map((order) => {
+        const meta = getOrderMeta(order.id);
+
+        return {
+          id: `order-${order.id}`,
+          type: 'ORDER',
+          title: order.client?.name || 'Cliente do pedido',
+          subtitle: `Pedido ${String(order.id || '').slice(0, 8).toUpperCase()}`,
+          address: getFullAddress(order),
+          phone: order.client?.phone || '',
+          status: order.status || 'Pendente',
+          date: meta.deliveryDate || getDateKey(order.createdAt),
+        };
+      });
+
+    const withdrawalLocations = withdrawals
+      .filter((withdrawal) => {
+        const address = getFullAddress(withdrawal);
+
+        if (!address) {
+          return false;
+        }
+
+        if (!isOpenWithdrawal(withdrawal)) {
+          return false;
+        }
+
+        return getDateKey(withdrawal.pickupDate) === today;
+      })
+      .map((withdrawal) => ({
+        id: `withdrawal-${withdrawal.id}`,
+        type: 'WITHDRAWAL',
+        title: withdrawal.client || 'Cliente da retirada',
+        subtitle: withdrawal.phone || 'Sem telefone',
+        address: getFullAddress(withdrawal),
+        phone: withdrawal.phone || '',
+        status: withdrawal.status || 'PENDENTE',
+        pickupDate: withdrawal.pickupDate || '',
+        item: withdrawal.item || '',
+      }));
+
+    return [
+      ...withdrawalLocations,
+      ...orderLocations,
+    ];
+  }, [orders, withdrawals, today]);
+
+  const filteredLocations = locations.filter((location) => {
+    const text = search.toLowerCase();
+
+    const matchesSearch =
+      !text ||
+      location.title.toLowerCase().includes(text) ||
+      location.subtitle.toLowerCase().includes(text) ||
+      location.address.toLowerCase().includes(text) ||
+      location.phone.toLowerCase().includes(text) ||
+      location.status.toLowerCase().includes(text) ||
+      location.item?.toLowerCase().includes(text);
+
+    const matchesType =
+      !typeFilter ||
+      location.type === typeFilter;
+
+    return matchesSearch && matchesType;
+  });
+
+  useEffect(() => {
+    if (filteredLocations.length === 0) {
+      setSelectedLocation(null);
+      return;
+    }
+
+    if (!selectedLocation) {
+      setSelectedLocation(filteredLocations[0]);
+      return;
+    }
+
+    const stillExists = filteredLocations.some(
+      (location) => location.id === selectedLocation.id
+    );
+
+    if (!stillExists) {
+      setSelectedLocation(filteredLocations[0]);
+    }
+  }, [filteredLocations, selectedLocation]);
+
+  async function copyAddress(address: string) {
+    try {
+      await navigator.clipboard.writeText(address);
+      alert('Endereço copiado.');
+    } catch {
+      alert(address);
+    }
+  }
+
+  const activeAddress = selectedLocation?.address || '';
+
+  return (
+    <Layout>
+      <PageHeader
+        title="Mapa"
+        description="Rotas de hoje com pedidos pendentes e retiradas do dia"
+      />
+
+      <div className="grid lg:grid-cols-[420px_1fr] gap-6">
+        <div className="space-y-5">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <Search size={20} className="text-yellow-400" />
+
+              <h2 className="text-xl font-black text-yellow-400">
+                Rotas de hoje
+              </h2>
+            </div>
+
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-4">
+              <p className="text-zinc-400 font-bold">
+                Hoje
+              </p>
+
+              <p className="text-2xl font-black text-yellow-400">
+                {new Date(`${today}T12:00:00`).toLocaleDateString('pt-BR')}
+              </p>
+
+              {user?.role === 'DELIVERY' && (
+                <p className="text-sm text-zinc-500 mt-2">
+                  Você está vendo apenas entregas e retiradas de hoje.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por cliente, telefone ou endereço..."
+                className={inputClass}
+              />
+
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+                className={inputClass}
+              >
+                <option value="">Pedidos e retiradas</option>
+                <option value="ORDER">Somente pedidos</option>
+                <option value="WITHDRAWAL">Somente retiradas</option>
+              </select>
+
+              <button
+                onClick={loadData}
+                className="w-full bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold flex items-center justify-center gap-2"
+              >
+                <RefreshCcw size={18} />
+                Atualizar mapa
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+            <div className="p-5 border-b border-zinc-800">
+              <p className="text-zinc-400 font-bold">
+                {filteredLocations.length} rota(s) de hoje
+              </p>
+            </div>
+
+            <div className="max-h-[540px] overflow-y-auto">
+              {filteredLocations.map((location) => {
+                const config = getTypeConfig(location.type);
+                const Icon = config.icon;
+                const active = selectedLocation?.id === location.id;
+
+                return (
+                  <button
+                    key={location.id}
+                    onClick={() => setSelectedLocation(location)}
+                    className={`w-full text-left p-5 border-b border-zinc-800 transition ${
+                      active
+                        ? 'bg-yellow-400 text-black'
+                        : 'hover:bg-zinc-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-black text-lg">
+                          {location.title}
+                        </p>
+
+                        <p className={active ? 'text-black/70' : 'text-zinc-400'}>
+                          {location.subtitle}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${
+                          active
+                            ? 'bg-black/20 text-black'
+                            : config.className
+                        }`}
+                      >
+                        <Icon size={14} />
+                        {config.label}
+                      </span>
+                    </div>
+
+                    <p className={`mt-3 text-sm ${active ? 'text-black/80' : 'text-zinc-500'}`}>
+                      {location.address}
+                    </p>
+
+                    {location.type === 'WITHDRAWAL' && location.item && (
+                      <p className={`mt-2 text-sm font-bold ${active ? 'text-black' : 'text-green-400'}`}>
+                        Buscar: {location.item}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+
+              {filteredLocations.length === 0 && (
+                <div className="p-5 text-zinc-500">
+                  Nenhum pedido ou retirada para hoje.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden min-h-[720px]">
+          {selectedLocation ? (
+            <>
+              <div className="p-6 border-b border-zinc-800">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin size={24} className="text-yellow-400" />
+
+                      <h2 className="text-2xl font-black">
+                        {selectedLocation.title}
+                      </h2>
+                    </div>
+
+                    <p className="text-zinc-400 font-bold">
+                      {selectedLocation.address}
+                    </p>
+
+                    {selectedLocation.phone && (
+                      <p className="text-zinc-500 mt-1">
+                        Telefone: {selectedLocation.phone}
+                      </p>
+                    )}
+
+                    {selectedLocation.item && (
+                      <p className="text-green-400 font-bold mt-2">
+                        Buscar: {selectedLocation.item}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <a
+                      href={getMapsUrl(activeAddress)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-yellow-400 text-black rounded-2xl px-5 py-3 font-black flex items-center gap-2"
+                    >
+                      <Navigation size={18} />
+                      Google Maps
+                    </a>
+
+                    <a
+                      href={getWazeUrl(activeAddress)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-blue-500 text-white rounded-2xl px-5 py-3 font-black flex items-center gap-2"
+                    >
+                      <Navigation size={18} />
+                      Waze
+                    </a>
+
+                    <button
+                      onClick={() => copyAddress(activeAddress)}
+                      className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold flex items-center gap-2"
+                    >
+                      <Copy size={18} />
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <iframe
+                title="Mapa RJ Chopp"
+                src={getEmbedUrl(activeAddress)}
+                className="w-full h-[620px] bg-zinc-950"
+                loading="lazy"
+              />
+            </>
+          ) : (
+            <div className="h-full min-h-[720px] flex items-center justify-center text-zinc-500">
+              Nenhuma rota de hoje encontrada.
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  );
+}
