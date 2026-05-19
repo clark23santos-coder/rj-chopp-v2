@@ -2,10 +2,10 @@ import Sidebar from './Sidebar';
 
 export default function Layout({ children }: any) {
   return (
-    <main className="h-screen bg-zinc-950 text-white overflow-hidden">
+    <main className="bg-zinc-950 text-white min-h-[100dvh] w-full">
       <Sidebar />
 
-      <section className="ml-72 h-screen overflow-y-auto p-6 md:p-10">
+      <section className="w-full min-h-[100dvh] p-4 pt-24 md:pt-8 md:p-8 md:pl-28 lg:pl-80">
         {children}
       </section>
     </main>

@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPinned,
+  X,
 } from 'lucide-react';
 
 function getCurrentUser() {
@@ -137,9 +138,12 @@ const menuItems = [
 
 export default function Sidebar() {
   const navigate = useNavigate();
+
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem('rjchopp_sidebar_collapsed') === 'true';
   });
+
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const user = getCurrentUser();
 
@@ -164,98 +168,198 @@ export default function Sidebar() {
     navigate('/login');
   }
 
-  return (
-    <aside
-      className={`h-screen overflow-y-auto bg-black border-r border-zinc-800 p-4 transition-all duration-300 shrink-0 ${
-        collapsed ? 'w-24' : 'w-72'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-3 mb-8">
-        {!collapsed && (
-          <div>
-            <h1 className="text-3xl font-black text-yellow-400 leading-none">
-              RJ Chopp
-            </h1>
+  function closeMobileMenu() {
+    setMobileOpen(false);
+  }
 
-            <p className="text-xs text-zinc-500 font-bold mt-2">
-              Sistema de gestão
+  return (
+    <>
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-black border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-black text-yellow-400 leading-none">
+            RJ Chopp
+          </h1>
+
+          {user && (
+            <p className="text-xs text-zinc-500 font-bold">
+              {user.name} • {user.roleLabel}
+            </p>
+          )}
+        </div>
+
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="bg-yellow-400 text-black rounded-2xl p-3 font-black"
+        >
+          <Menu size={24} />
+        </button>
+      </div>
+
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-[90] bg-black/70">
+          <aside className="absolute left-0 top-0 bottom-0 w-[86vw] max-w-[340px] bg-black border-r border-zinc-800 p-4 overflow-y-auto">
+            <div className="flex items-center justify-between gap-3 mb-6">
+              <div>
+                <h1 className="text-3xl font-black text-yellow-400 leading-none">
+                  RJ Chopp
+                </h1>
+
+                <p className="text-xs text-zinc-500 font-bold mt-2">
+                  Sistema de gestão
+                </p>
+              </div>
+
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="bg-zinc-900 text-white rounded-2xl p-3 border border-zinc-800"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            {user && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 mb-6">
+                <p className="text-xs text-zinc-500 font-bold uppercase">
+                  Usuário
+                </p>
+
+                <p className="text-white font-black truncate">
+                  {user.name}
+                </p>
+
+                <p className="text-yellow-400 text-sm font-bold">
+                  {user.roleLabel}
+                </p>
+              </div>
+            )}
+
+            <nav className="flex flex-col gap-3 pb-6">
+              {visibleItems.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={menuClass}
+                    onClick={closeMobileMenu}
+                  >
+                    <Icon size={22} className="shrink-0" />
+
+                    <span className="truncate">
+                      {item.label}
+                    </span>
+                  </NavLink>
+                );
+              })}
+            </nav>
+
+            <div className="border-t border-zinc-800 pt-4 mt-4">
+              <button
+                onClick={logout}
+                className="w-full rounded-2xl px-4 py-3 font-black transition flex items-center gap-3 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white"
+              >
+                <LogOut size={22} />
+
+                <span>Sair</span>
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      <aside
+        className={`hidden md:block fixed left-0 top-0 h-screen overflow-y-auto bg-black border-r border-zinc-800 p-4 transition-all duration-300 z-40 ${
+          collapsed ? 'w-24' : 'w-72'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-3 mb-8">
+          {!collapsed && (
+            <div>
+              <h1 className="text-3xl font-black text-yellow-400 leading-none">
+                RJ Chopp
+              </h1>
+
+              <p className="text-xs text-zinc-500 font-bold mt-2">
+                Sistema de gestão
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={toggleSidebar}
+            className="bg-yellow-400 text-black rounded-2xl p-3 font-black hover:bg-yellow-500 transition"
+            title={collapsed ? 'Abrir menu' : 'Fechar menu'}
+          >
+            {collapsed ? <Menu size={22} /> : <ChevronLeft size={22} />}
+          </button>
+        </div>
+
+        {!collapsed && user && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 mb-6">
+            <p className="text-xs text-zinc-500 font-bold uppercase">
+              Usuário
+            </p>
+
+            <p className="text-white font-black truncate">
+              {user.name}
+            </p>
+
+            <p className="text-yellow-400 text-sm font-bold">
+              {user.roleLabel}
             </p>
           </div>
         )}
 
-        <button
-          onClick={toggleSidebar}
-          className="bg-yellow-400 text-black rounded-2xl p-3 font-black hover:bg-yellow-500 transition"
-          title={collapsed ? 'Abrir menu' : 'Fechar menu'}
-        >
-          {collapsed ? <Menu size={22} /> : <ChevronLeft size={22} />}
-        </button>
-      </div>
+        <nav className="flex flex-col gap-3 pb-6">
+          {visibleItems.map((item) => {
+            const Icon = item.icon;
 
-      {!collapsed && user && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 mb-6">
-          <p className="text-xs text-zinc-500 font-bold uppercase">
-            Usuário
-          </p>
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={menuClass}
+                title={collapsed ? item.label : undefined}
+              >
+                <Icon size={22} className="shrink-0" />
 
-          <p className="text-white font-black truncate">
-            {user.name}
-          </p>
+                {!collapsed && (
+                  <span className="truncate">
+                    {item.label}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
+        </nav>
 
-          <p className="text-yellow-400 text-sm font-bold">
-            {user.roleLabel}
-          </p>
-        </div>
-      )}
-
-      <nav className="flex flex-col gap-3 pb-6">
-        {visibleItems.map((item) => {
-          const Icon = item.icon;
-
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={menuClass}
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon size={22} className="shrink-0" />
-
-              {!collapsed && (
-                <span className="truncate">
-                  {item.label}
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
-      </nav>
-
-      <div className="border-t border-zinc-800 pt-4 mt-4">
-        <button
-          onClick={logout}
-          className={`w-full rounded-2xl px-4 py-3 font-black transition flex items-center gap-3 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white ${
-            collapsed ? 'justify-center' : ''
-          }`}
-          title="Sair"
-        >
-          <LogOut size={22} />
-
-          {!collapsed && (
-            <span>Sair</span>
-          )}
-        </button>
-
-        {collapsed && (
+        <div className="border-t border-zinc-800 pt-4 mt-4">
           <button
-            onClick={toggleSidebar}
-            className="w-full mt-3 rounded-2xl px-4 py-3 font-black transition flex items-center justify-center bg-zinc-900 text-zinc-300 hover:bg-zinc-800 border border-zinc-800"
-            title="Abrir menu"
+            onClick={logout}
+            className={`w-full rounded-2xl px-4 py-3 font-black transition flex items-center gap-3 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white ${
+              collapsed ? 'justify-center' : ''
+            }`}
+            title="Sair"
           >
-            <ChevronRight size={22} />
+            <LogOut size={22} />
+
+            {!collapsed && (
+              <span>Sair</span>
+            )}
           </button>
-        )}
-      </div>
-    </aside>
+
+          {collapsed && (
+            <button
+              onClick={toggleSidebar}
+              className="w-full mt-3 rounded-2xl px-4 py-3 font-black transition flex items-center justify-center bg-zinc-900 text-zinc-300 hover:bg-zinc-800 border border-zinc-800"
+              title="Abrir menu"
+            >
+              <ChevronRight size={22} />
+            </button>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }
