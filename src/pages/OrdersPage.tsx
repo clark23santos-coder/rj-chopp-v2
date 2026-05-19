@@ -19,6 +19,17 @@ const inputClass =
 
 const WITHDRAWALS_STORAGE_KEY = 'rjchopp_withdrawals';
 const ORDER_META_STORAGE_KEY = 'rjchopp_order_meta';
+const COMPANY_SETTINGS_STORAGE_KEY = 'rjchopp_company_settings';
+
+const defaultCompanySettings = {
+  companyName: 'RJ CHOPP',
+  phone: '(44) 99958-8160',
+  city: 'Loanda - Paraná',
+  address: '',
+  document: '',
+  noteMessage: 'Obrigado pela preferência.',
+  reportFooter: 'Relatório gerado pelo sistema RJ Chopp SGE',
+};
 
 function formatMoney(value: any) {
   return new Intl.NumberFormat('pt-BR', {
@@ -61,6 +72,13 @@ function readStorage(key: string, fallback: any) {
 
 function writeStorage(key: string, value: any) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getCompanySettings() {
+  return {
+    ...defaultCompanySettings,
+    ...readStorage(COMPANY_SETTINGS_STORAGE_KEY, {}),
+  };
 }
 
 function getStatusLabel(status: string) {
@@ -171,6 +189,8 @@ export default function OrdersPage() {
       quantity: 1,
     },
   ]);
+
+  const companySettings = getCompanySettings();
 
   function getToken() {
     return localStorage.getItem('token');
@@ -1232,7 +1252,7 @@ export default function OrdersPage() {
                 <div className="flex items-start justify-between gap-6">
                   <div>
                     <h1 className="text-5xl font-black tracking-tight">
-                      RJ CHOPP
+                      {companySettings.companyName || 'RJ CHOPP'}
                     </h1>
 
                     <p className="text-lg font-black text-zinc-700">
@@ -1240,8 +1260,21 @@ export default function OrdersPage() {
                     </p>
 
                     <p className="text-zinc-600">
-                      Loanda - Paraná | (44) 99958-8160
+                      {companySettings.city || 'Loanda - Paraná'}
+                      {companySettings.phone ? ` | ${companySettings.phone}` : ''}
                     </p>
+
+                    {companySettings.address && (
+                      <p className="text-zinc-600">
+                        {companySettings.address}
+                      </p>
+                    )}
+
+                    {companySettings.document && (
+                      <p className="text-zinc-600">
+                        {companySettings.document}
+                      </p>
+                    )}
                   </div>
 
                   <div className="text-right border-2 border-black rounded-2xl p-4 min-w-[190px]">
@@ -1448,8 +1481,16 @@ export default function OrdersPage() {
                 </div>
               </div>
 
+              {companySettings.noteMessage && (
+                <div className="border border-zinc-300 rounded-2xl p-4 mt-8 text-center">
+                  <p className="font-bold">
+                    {companySettings.noteMessage}
+                  </p>
+                </div>
+              )}
+
               <div className="border-t border-zinc-300 mt-8 pt-3 text-xs text-zinc-500 text-center">
-                RJ Chopp SGE • Documento gerado automaticamente pelo sistema
+                {companySettings.reportFooter || 'RJ Chopp SGE • Documento gerado automaticamente pelo sistema'}
               </div>
             </div>
 
