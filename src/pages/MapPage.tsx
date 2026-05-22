@@ -7,6 +7,8 @@ import {
   RefreshCcw,
   ClipboardList,
   Truck,
+  Route,
+  X,
 } from 'lucide-react';
 
 import Layout from '../components/Layout';
@@ -94,6 +96,37 @@ function getEmbedUrl(address: string) {
   return `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`;
 }
 
+function getGoogleRouteUrl(locations: any[]) {
+  const addresses = locations
+    .map((location) => String(location.address || '').trim())
+    .filter(Boolean);
+
+  if (addresses.length === 0) {
+    return '';
+  }
+
+  if (addresses.length === 1) {
+    return getMapsUrl(addresses[0]);
+  }
+
+  const origin = addresses[0];
+  const destination = addresses[addresses.length - 1];
+  const waypoints = addresses.slice(1, -1);
+
+  const params = new URLSearchParams();
+
+  params.set('api', '1');
+  params.set('origin', origin);
+  params.set('destination', destination);
+  params.set('travelmode', 'driving');
+
+  if (waypoints.length > 0) {
+    params.set('waypoints', waypoints.join('|'));
+  }
+
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
 function getTypeConfig(type: string) {
   if (type === 'ORDER') {
     return {
@@ -139,6 +172,7 @@ export default function MapPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
+  const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
 
   const today = getToday();
   const user = getCurrentUser();
@@ -206,6 +240,7 @@ export default function MapPage() {
           phone: order.client?.phone || '',
           status: order.status || 'Pendente',
           date: meta.deliveryDate || getDateKey(order.createdAt),
+          item: '',
         };
       });
 
@@ -260,6 +295,10 @@ export default function MapPage() {
     return matchesSearch && matchesType;
   });
 
+  const selectedRouteLocations = selectedRouteIds
+    .map((id) => locations.find((location) => location.id === id))
+    .filter(Boolean);
+
   useEffect(() => {
     if (filteredLocations.length === 0) {
       setSelectedLocation(null);
@@ -289,6 +328,44 @@ export default function MapPage() {
     }
   }
 
+  function toggleRouteSelection(location: any) {
+    const alreadySelected = selectedRouteIds.includes(location.id);
+
+    if (alreadySelected) {
+      setSelectedRouteIds((current) =>
+        current.filter((id) => id !== location.id)
+      );
+      return;
+    }
+
+    if (selectedRouteIds.length >= 10) {
+      alert('O limite é de 10 paradas por rota.');
+      return;
+    }
+
+    setSelectedRouteIds((current) => [...current, location.id]);
+  }
+
+  function openSelectedRoute() {
+    if (selectedRouteLocations.length === 0) {
+      alert('Selecione pelo menos uma parada.');
+      return;
+    }
+
+    const url = getGoogleRouteUrl(selectedRouteLocations);
+
+    if (!url) {
+      alert('Não foi possível criar a rota.');
+      return;
+    }
+
+    window.open(url, '_blank');
+  }
+
+  function clearRouteSelection() {
+    setSelectedRouteIds([]);
+  }
+
   const activeAddress = selectedLocation?.address || '';
 
   return (
@@ -298,7 +375,7 @@ export default function MapPage() {
         description="Rotas de hoje com pedidos pendentes e retiradas do dia"
       />
 
-      <div className="grid lg:grid-cols-[420px_1fr] gap-6">
+      <div className="grid lg:grid-cols-[450px_1fr] gap-6">
         <div className="space-y-5">
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
             <div className="flex items-center gap-3 mb-4">
@@ -353,6 +430,73 @@ export default function MapPage() {
             </div>
           </div>
 
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <Route size={22} className="text-yellow-400" />
+
+              <div>
+                <h2 className="text-xl font-black text-yellow-400">
+                  Rota com paradas
+                </h2>
+
+                <p className="text-zinc-500 text-sm font-bold">
+                  {selectedRouteIds.length}/10 paradas selecionadas
+                </p>
+              </div>
+            </div>
+
+            {selectedRouteLocations.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {selectedRouteLocations.map((location: any, index: number) => (
+                  <div
+                    key={location.id}
+                    className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3 flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <p className="text-sm font-black">
+                        {index + 1}. {location.title}
+                      </p>
+
+                      <p className="text-xs text-zinc-500">
+                        {location.address}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => toggleRouteSelection(location)}
+                      className="bg-red-500/20 text-red-400 rounded-xl p-2"
+                      title="Remover da rota"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-zinc-500 text-sm mb-4">
+                Marque os quadradinhos nos pedidos/retiradas para montar uma rota.
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={openSelectedRoute}
+                className="bg-yellow-400 text-black rounded-2xl px-4 py-3 font-black flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={selectedRouteLocations.length === 0}
+              >
+                <Navigation size={18} />
+                Criar rota
+              </button>
+
+              <button
+                onClick={clearRouteSelection}
+                className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-4 py-3 font-bold"
+              >
+                Limpar
+              </button>
+            </div>
+          </div>
+
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
             <div className="p-5 border-b border-zinc-800">
               <p className="text-zinc-400 font-bold">
@@ -365,50 +509,76 @@ export default function MapPage() {
                 const config = getTypeConfig(location.type);
                 const Icon = config.icon;
                 const active = selectedLocation?.id === location.id;
+                const selectedInRoute = selectedRouteIds.includes(location.id);
 
                 return (
-                  <button
+                  <div
                     key={location.id}
-                    onClick={() => setSelectedLocation(location)}
                     className={`w-full text-left p-5 border-b border-zinc-800 transition ${
                       active
                         ? 'bg-yellow-400 text-black'
                         : 'hover:bg-zinc-800'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-black text-lg">
-                          {location.title}
-                        </p>
-
-                        <p className={active ? 'text-black/70' : 'text-zinc-400'}>
-                          {location.subtitle}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${
-                          active
-                            ? 'bg-black/20 text-black'
-                            : config.className
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleRouteSelection(location);
+                        }}
+                        className={`mt-1 w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 ${
+                          selectedInRoute
+                            ? active
+                              ? 'bg-black border-black text-yellow-400'
+                              : 'bg-yellow-400 border-yellow-400 text-black'
+                            : active
+                            ? 'border-black text-transparent'
+                            : 'border-zinc-600 text-transparent'
                         }`}
+                        title="Selecionar para rota"
                       >
-                        <Icon size={14} />
-                        {config.label}
-                      </span>
+                        ✓
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedLocation(location)}
+                        className="flex-1 text-left"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-black text-lg">
+                              {location.title}
+                            </p>
+
+                            <p className={active ? 'text-black/70' : 'text-zinc-400'}>
+                              {location.subtitle}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${
+                              active
+                                ? 'bg-black/20 text-black'
+                                : config.className
+                            }`}
+                          >
+                            <Icon size={14} />
+                            {config.label}
+                          </span>
+                        </div>
+
+                        <p className={`mt-3 text-sm ${active ? 'text-black/80' : 'text-zinc-500'}`}>
+                          {location.address}
+                        </p>
+
+                        {location.type === 'WITHDRAWAL' && location.item && (
+                          <p className={`mt-2 text-sm font-bold ${active ? 'text-black' : 'text-green-400'}`}>
+                            Buscar: {location.item}
+                          </p>
+                        )}
+                      </button>
                     </div>
-
-                    <p className={`mt-3 text-sm ${active ? 'text-black/80' : 'text-zinc-500'}`}>
-                      {location.address}
-                    </p>
-
-                    {location.type === 'WITHDRAWAL' && location.item && (
-                      <p className={`mt-2 text-sm font-bold ${active ? 'text-black' : 'text-green-400'}`}>
-                        Buscar: {location.item}
-                      </p>
-                    )}
-                  </button>
+                  </div>
                 );
               })}
 
