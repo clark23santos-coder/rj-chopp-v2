@@ -166,6 +166,56 @@ function getProductDisplayName(product: any) {
   return parts.filter(Boolean).join(' - ');
 }
 
+function hasStockAlreadyDiscounted(order: any, meta: any) {
+  if (meta.stockDiscounted === true) {
+    return true;
+  }
+
+  if (order?.stockDiscounted === true) {
+    return true;
+  }
+
+  return false;
+}
+
+function isFutureScheduledOrder(order: any, meta: any, today: string) {
+  const status = String(order.status || '').toUpperCase();
+  const deliveryDate = String(meta.deliveryDate || '');
+
+  if (!deliveryDate) {
+    return false;
+  }
+
+  if (status !== 'PENDING') {
+    return false;
+  }
+
+  if (hasStockAlreadyDiscounted(order, meta)) {
+    return false;
+  }
+
+  return deliveryDate > today;
+}
+
+function isScheduledForToday(order: any, meta: any, today: string) {
+  const status = String(order.status || '').toUpperCase();
+  const deliveryDate = String(meta.deliveryDate || '');
+
+  if (!deliveryDate) {
+    return false;
+  }
+
+  if (status !== 'PENDING') {
+    return false;
+  }
+
+  if (hasStockAlreadyDiscounted(order, meta)) {
+    return false;
+  }
+
+  return deliveryDate === today;
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -298,6 +348,16 @@ export default function OrdersPage() {
       meta.returnItems?.toLowerCase().includes(text);
 
     const deliveredAndWaitingPickup = orderStatus === 'APPROVED';
+    const futureScheduledOrder = isFutureScheduledOrder(order, meta, today);
+    const scheduledForToday = isScheduledForToday(order, meta, today);
+
+    if (statusFilter === 'AGENDADO') {
+      const matchesPayment =
+        !paymentFilter ||
+        String(order.paymentMethod || '').toUpperCase() === paymentFilter;
+
+      return matchesSearch && matchesPayment && futureScheduledOrder;
+    }
 
     const shouldHideDeliveredFromOrders =
       !statusFilter &&
@@ -306,6 +366,16 @@ export default function OrdersPage() {
       deliveredAndWaitingPickup;
 
     if (shouldHideDeliveredFromOrders) {
+      return false;
+    }
+
+    const shouldHideFutureScheduledFromOpenOrders =
+      !statusFilter &&
+      !returnFilter &&
+      !text &&
+      futureScheduledOrder;
+
+    if (shouldHideFutureScheduledFromOpenOrders) {
       return false;
     }
 
@@ -327,6 +397,10 @@ export default function OrdersPage() {
       (returnFilter === 'AGENDADO' &&
         meta.pickupDate &&
         meta.pickupDate > today);
+
+    if (!statusFilter && scheduledForToday) {
+      return matchesSearch && matchesPayment && matchesReturn;
+    }
 
     return matchesSearch && matchesStatus && matchesPayment && matchesReturn;
   });
@@ -409,6 +483,8 @@ export default function OrdersPage() {
       const paymentMethod = String(form.get('paymentMethod') || '');
       const deliveryDate = String(form.get('deliveryDate') || '');
       const observation = String(form.get('observation') || '');
+      const discountStockNowValue = String(form.get('discountStockNow') || 'SIM');
+      const discountStockNow = discountStockNowValue === 'SIM';
 
       if (!clientId) {
         alert('Selecione um cliente.');
@@ -454,7 +530,12 @@ export default function OrdersPage() {
           observation,
         }),
         items,
+        discountStockNow: editingOrder
+          ? hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id))
+          : discountStockNow,
       };
+
+      console.log('Descontar estoque agora?', data.discountStockNow);
 
       if (editingOrder) {
         await api.put(
@@ -466,6 +547,7 @@ export default function OrdersPage() {
         saveOrderMeta(editingOrder.id, {
           deliveryDate,
           observation,
+          stockDiscounted: hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id)),
         });
       } else {
         const response = await api.post('/orders', data, authHeaders());
@@ -476,6 +558,7 @@ export default function OrdersPage() {
             observation,
             pickupDate: '',
             returnItems: '',
+            stockDiscounted: discountStockNow,
           });
         }
       }
@@ -512,6 +595,7 @@ export default function OrdersPage() {
           returnItems: extra.returnItems || getOrderMeta(order.id)?.returnItems || '',
           observation: extra.observation || getOrderMeta(order.id)?.observation || '',
         }),
+        discountStockNow: extra.discountStockNow === true,
       },
       authHeaders()
     );
@@ -547,10 +631,16 @@ export default function OrdersPage() {
         return;
       }
 
+      const stockWasAlreadyDiscounted = hasStockAlreadyDiscounted(
+        deliveryOrder,
+        getOrderMeta(deliveryOrder.id)
+      );
+
       await updateOrderStatus(deliveryOrder, 'entregue', {
         pickupDate,
         returnItems,
         observation,
+        discountStockNow: !stockWasAlreadyDiscounted,
       });
 
       saveOrderMeta(deliveryOrder.id, {
@@ -558,6 +648,7 @@ export default function OrdersPage() {
         returnItems,
         observation,
         deliveredAt: new Date().toISOString(),
+        stockDiscounted: true,
       });
 
       const withdrawals = readStorage(WITHDRAWALS_STORAGE_KEY, []);
@@ -653,7 +744,7 @@ export default function OrdersPage() {
 
   async function deleteOrder(order: any) {
     const confirmDelete = window.confirm(
-      `Tem certeza que deseja apagar esse pedido?\n\nO estoque será devolvido e a entrada financeira automática será apagada.`
+      `Tem certeza que deseja apagar esse pedido?\n\nSe o estoque já tiver sido descontado, ele será devolvido. A entrada financeira automática será apagada.`
     );
 
     if (!confirmDelete) {
@@ -820,6 +911,7 @@ export default function OrdersPage() {
             className={inputClass}
           >
             <option value="">Pedidos em aberto</option>
+            <option value="AGENDADO">Pedidos agendados</option>
             <option value="PENDING">Pendente</option>
             <option value="APPROVED">Entregue / em retirada</option>
             <option value="FINISHED">Finalizado</option>
@@ -870,6 +962,7 @@ export default function OrdersPage() {
                 <th className="p-5">Pagamento</th>
                 <th className="p-5">Total</th>
                 <th className="p-5">Status</th>
+                <th className="p-5">Estoque</th>
                 <th className="p-5">Ações</th>
               </tr>
             </thead>
@@ -893,7 +986,21 @@ export default function OrdersPage() {
                     </td>
 
                     <td className="p-5 text-zinc-400">
-                      {formatDate(meta.deliveryDate)}
+                      <div>
+                        <p>{formatDate(meta.deliveryDate)}</p>
+
+                        {isFutureScheduledOrder(order, meta, today) && (
+                          <p className="text-xs text-blue-400 font-bold mt-1">
+                            Pedido agendado
+                          </p>
+                        )}
+
+                        {isScheduledForToday(order, meta, today) && (
+                          <p className="text-xs text-yellow-400 font-bold mt-1">
+                            Entrega hoje
+                          </p>
+                        )}
+                      </div>
                     </td>
 
                     <td className="p-5 text-zinc-400">
@@ -935,6 +1042,18 @@ export default function OrdersPage() {
                       >
                         {getStatusLabel(order.status)}
                       </span>
+                    </td>
+
+                    <td className="p-5">
+                      {hasStockAlreadyDiscounted(order, meta) ? (
+                        <span className="bg-green-500/20 text-green-400 px-4 py-2 rounded-full text-sm font-bold">
+                          Baixado
+                        </span>
+                      ) : (
+                        <span className="bg-blue-500/20 text-blue-400 px-4 py-2 rounded-full text-sm font-bold">
+                          Agendado
+                        </span>
+                      )}
                     </td>
 
                     <td className="p-5">
@@ -1000,7 +1119,7 @@ export default function OrdersPage() {
 
               {filteredOrders.length === 0 && (
                 <tr>
-                  <td className="p-5 text-zinc-500" colSpan={9}>
+                  <td className="p-5 text-zinc-500" colSpan={10}>
                     Nenhum pedido encontrado.
                   </td>
                 </tr>
@@ -1057,6 +1176,50 @@ export default function OrdersPage() {
                   className={inputClass}
                 />
               </div>
+
+              {!editingOrder && (
+                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5">
+                  <label className="block mb-3 text-sm font-bold text-zinc-300">
+                    Descontar estoque agora?
+                  </label>
+
+                  <select
+                    name="discountStockNow"
+                    defaultValue="SIM"
+                    className={inputClass}
+                  >
+                    <option value="SIM">
+                      Sim, baixar estoque agora
+                    </option>
+
+                    <option value="NAO">
+                      Não, deixar pedido agendado
+                    </option>
+                  </select>
+
+                  <p className="text-zinc-500 text-sm mt-3">
+                    Escolha “Não” para pedido futuro. Nesse caso o estoque só baixa quando clicar em “Foi entregue”.
+                  </p>
+                </div>
+              )}
+
+              {editingOrder && (
+                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5">
+                  <p className="text-sm font-bold text-zinc-300 mb-2">
+                    Situação do estoque
+                  </p>
+
+                  {hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id)) ? (
+                    <p className="text-green-400 font-black">
+                      Estoque já foi descontado
+                    </p>
+                  ) : (
+                    <p className="text-blue-400 font-black">
+                      Pedido agendado sem descontar estoque
+                    </p>
+                  )}
+                </div>
+              )}
 
               <textarea
                 name="observation"
@@ -1350,6 +1513,17 @@ export default function OrdersPage() {
                       </p>
                       <p className="font-bold">
                         {getStatusLabel(selectedOrder.status)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-bold text-zinc-500 uppercase">
+                        Estoque
+                      </p>
+                      <p className="font-bold">
+                        {hasStockAlreadyDiscounted(selectedOrder, getOrderMeta(selectedOrder.id))
+                          ? 'Baixado'
+                          : 'Agendado'}
                       </p>
                     </div>
 
