@@ -166,6 +166,64 @@ function getProductDisplayName(product: any) {
   return parts.filter(Boolean).join(' - ');
 }
 
+function isAccessoryProduct(product: any) {
+  const text = `${product?.name || ''} ${product?.category || ''} ${product?.brand || ''}`.toLowerCase();
+
+  return (
+    text.includes('chopeira') ||
+    text.includes('chopera') ||
+    text.includes('cilindro')
+  );
+}
+
+function getProductsForOrderSelect(products: any[], selectedProductId: string) {
+  return products.filter((product) => {
+    if (product.id === selectedProductId) {
+      return true;
+    }
+
+    return !isAccessoryProduct(product);
+  });
+}
+
+function getProductSearchText(product: any) {
+  return [
+    product?.name,
+    product?.brand,
+    product?.category,
+    product?.unit,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function isChoppOrBarrelProduct(product: any) {
+  const text = getProductSearchText(product);
+
+  return (
+    text.includes('chopp') ||
+    text.includes('chope') ||
+    text.includes('barril') ||
+    text.includes('keg')
+  );
+}
+
+function isChopeiraProduct(product: any) {
+  const text = getProductSearchText(product);
+
+  return (
+    text.includes('chopeira') ||
+    text.includes('choperia')
+  );
+}
+
+function isCilindroProduct(product: any) {
+  const text = getProductSearchText(product);
+
+  return text.includes('cilindro');
+}
+
 function hasStockAlreadyDiscounted(order: any, meta: any) {
   if (meta.stockDiscounted === true) {
     return true;
@@ -405,6 +463,67 @@ export default function OrdersPage() {
     return matchesSearch && matchesStatus && matchesPayment && matchesReturn;
   });
 
+  function findChopeiraProduct() {
+    return products.find((product) => isChopeiraProduct(product));
+  }
+
+  function findCilindroProduct() {
+    return products.find((product) => isCilindroProduct(product));
+  }
+
+  function addAutomaticChoppAccessories(items: any[]) {
+    const selectedProducts = items
+      .map((item) =>
+        products.find((product) => product.id === item.productId)
+      )
+      .filter(Boolean);
+
+    const hasChoppOrBarrel = selectedProducts.some((product) =>
+      isChoppOrBarrelProduct(product)
+    );
+
+    if (!hasChoppOrBarrel) {
+      return items;
+    }
+
+    const chopeira = findChopeiraProduct();
+    const cilindro = findCilindroProduct();
+
+    const alreadyHasChopeira = items.some((item) => {
+      const product = products.find(
+        (productItem) => productItem.id === item.productId
+      );
+
+      return isChopeiraProduct(product);
+    });
+
+    const alreadyHasCilindro = items.some((item) => {
+      const product = products.find(
+        (productItem) => productItem.id === item.productId
+      );
+
+      return isCilindroProduct(product);
+    });
+
+    const updated = [...items];
+
+    if (chopeira && !alreadyHasChopeira) {
+      updated.push({
+        productId: chopeira.id,
+        quantity: 1,
+      });
+    }
+
+    if (cilindro && !alreadyHasCilindro) {
+      updated.push({
+        productId: cilindro.id,
+        quantity: 1,
+      });
+    }
+
+    return updated;
+  }
+
   function addItem() {
     setOrderItems([
       ...orderItems,
@@ -437,6 +556,11 @@ export default function OrdersPage() {
       ...updated[index],
       [field]: value,
     };
+
+    if (field === 'productId') {
+      setOrderItems(addAutomaticChoppAccessories(updated));
+      return;
+    }
 
     setOrderItems(updated);
   }
@@ -1235,10 +1359,23 @@ export default function OrdersPage() {
                   Produtos
                 </h3>
 
+                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4">
+                  <p className="text-sm text-zinc-400">
+                    Ao adicionar um produto de chopp/barril, o sistema sugere automaticamente
+                    <span className="text-yellow-400 font-bold"> 1 chopeira </span>
+                    e
+                    <span className="text-yellow-400 font-bold"> 1 cilindro</span>.
+                    Você pode editar a quantidade ou remover na hora.
+                  </p>
+                </div>
+
                 {orderItems.map((item, index) => {
                   const product = products.find(
                     (productItem) => productItem.id === item.productId
                   );
+
+                  const isAutomaticAccessory =
+                    isChopeiraProduct(product) || isCilindroProduct(product);
 
                   return (
                     <div
@@ -1254,7 +1391,7 @@ export default function OrdersPage() {
                       >
                         <option value="">Selecione um produto</option>
 
-                        {products.map((productItem) => (
+                        {getProductsForOrderSelect(products, item.productId).map((productItem) => (
                           <option key={productItem.id} value={productItem.id}>
                             {getProductDisplayName(productItem)} - {formatMoney(productItem.salePrice)}
                           </option>
@@ -1280,9 +1417,17 @@ export default function OrdersPage() {
                       </button>
 
                       {product && (
-                        <p className="md:col-span-3 text-sm text-zinc-500">
-                          Estoque atual: {product.stock} {product.unit}
-                        </p>
+                        <div className="md:col-span-3 flex flex-col md:flex-row md:items-center gap-2">
+                          <p className="text-sm text-zinc-500">
+                            Estoque atual: {product.stock} {product.unit}
+                          </p>
+
+                          {isAutomaticAccessory && (
+                            <span className="w-fit bg-yellow-400/20 text-yellow-400 px-3 py-1 rounded-full text-xs font-black">
+                              Sugestão automática editável
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   );

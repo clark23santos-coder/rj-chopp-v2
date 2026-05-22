@@ -31,6 +31,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [quickProductDefaults, setQuickProductDefaults] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   function getToken() {
@@ -58,6 +59,24 @@ export default function ProductsPage() {
   useEffect(() => {
     loadProducts();
   }, []);
+
+  function openNewProduct(defaults: any = null) {
+    setEditingProduct(null);
+    setQuickProductDefaults(defaults);
+    setShowModal(true);
+  }
+
+  function openEditProduct(product: any) {
+    setEditingProduct(product);
+    setQuickProductDefaults(null);
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setEditingProduct(null);
+    setQuickProductDefaults(null);
+  }
 
   async function saveProduct(event: any) {
     event.preventDefault();
@@ -89,8 +108,7 @@ export default function ProductsPage() {
         await api.post('/products', data, authHeaders());
       }
 
-      setShowModal(false);
-      setEditingProduct(null);
+      closeModal();
       await loadProducts();
     } catch (error) {
       console.log('Erro ao salvar produto:', error);
@@ -153,14 +171,49 @@ export default function ProductsPage() {
         />
 
         <button
-          onClick={() => {
-            setEditingProduct(null);
-            setShowModal(true);
-          }}
+          onClick={() => openNewProduct()}
           className="bg-yellow-400 text-black rounded-2xl px-6 py-3 font-black flex items-center justify-center gap-2"
         >
           <Plus size={20} />
           Novo Produto
+        </button>
+
+        <button
+          onClick={() =>
+            openNewProduct({
+              name: 'Chopeira',
+              brand: 'RJ Chopp',
+              category: 'Equipamento',
+              unit: 'UNIDADE',
+              stock: 1,
+              minimumStock: 0,
+              costPrice: 0,
+              salePrice: 0,
+            })
+          }
+          className="bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white rounded-2xl px-6 py-3 font-black flex items-center justify-center gap-2"
+        >
+          <Plus size={20} />
+          Chopeira
+        </button>
+
+        <button
+          onClick={() =>
+            openNewProduct({
+              name: 'Cilindro',
+              brand: 'RJ Chopp',
+              category: 'Equipamento',
+              unit: 'UNIDADE',
+              stock: 1,
+              minimumStock: 0,
+              costPrice: 0,
+              salePrice: 0,
+            })
+          }
+          className="bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-white rounded-2xl px-6 py-3 font-black flex items-center justify-center gap-2"
+        >
+          <Plus size={20} />
+          Cilindro
         </button>
       </div>
 
@@ -219,10 +272,7 @@ export default function ProductsPage() {
                 <td className="p-5">
                   <div className="flex gap-2">
                     <button
-                      onClick={() => {
-                        setEditingProduct(product);
-                        setShowModal(true);
-                      }}
+                      onClick={() => openEditProduct(product)}
                       className="bg-zinc-800 hover:bg-zinc-700 p-3 rounded-xl"
                       title="Editar produto"
                     >
@@ -264,7 +314,7 @@ export default function ProductsPage() {
                 <input
                   name="name"
                   placeholder="Nome do produto"
-                  defaultValue={editingProduct?.name || ''}
+                  defaultValue={editingProduct?.name || quickProductDefaults?.name || ''}
                   className={inputClass}
                 />
               </Field>
@@ -273,7 +323,7 @@ export default function ProductsPage() {
                 <input
                   name="brand"
                   placeholder="Marca"
-                  defaultValue={editingProduct?.brand || ''}
+                  defaultValue={editingProduct?.brand || quickProductDefaults?.brand || ''}
                   className={inputClass}
                 />
               </Field>
@@ -282,7 +332,7 @@ export default function ProductsPage() {
                 <input
                   name="unit"
                   placeholder="Unidade"
-                  defaultValue={editingProduct?.unit || 'UNIDADE'}
+                  defaultValue={editingProduct?.unit || quickProductDefaults?.unit || 'UNIDADE'}
                   className={inputClass}
                 />
               </Field>
@@ -291,7 +341,7 @@ export default function ProductsPage() {
                 <input
                   name="category"
                   placeholder="Categoria"
-                  defaultValue={editingProduct?.category || ''}
+                  defaultValue={editingProduct?.category || quickProductDefaults?.category || ''}
                   className={inputClass}
                 />
               </Field>
@@ -301,7 +351,7 @@ export default function ProductsPage() {
                   name="stock"
                   type="number"
                   placeholder="Estoque atual"
-                  defaultValue={editingProduct?.stock || 0}
+                  defaultValue={editingProduct?.stock ?? quickProductDefaults?.stock ?? 0}
                   className={inputClass}
                 />
               </Field>
@@ -311,7 +361,7 @@ export default function ProductsPage() {
                   name="minimumStock"
                   type="number"
                   placeholder="Estoque mínimo"
-                  defaultValue={editingProduct?.minimumStock || 0}
+                  defaultValue={editingProduct?.minimumStock ?? quickProductDefaults?.minimumStock ?? 0}
                   className={inputClass}
                 />
               </Field>
@@ -322,7 +372,7 @@ export default function ProductsPage() {
                   type="number"
                   step="0.01"
                   placeholder="Valor de compra / custo"
-                  defaultValue={editingProduct?.costPrice || 0}
+                  defaultValue={editingProduct?.costPrice ?? quickProductDefaults?.costPrice ?? 0}
                   className={inputClass}
                 />
               </Field>
@@ -333,7 +383,7 @@ export default function ProductsPage() {
                   type="number"
                   step="0.01"
                   placeholder="Valor de venda"
-                  defaultValue={editingProduct?.salePrice || 0}
+                  defaultValue={editingProduct?.salePrice ?? quickProductDefaults?.salePrice ?? 0}
                   className={inputClass}
                 />
               </Field>
@@ -347,10 +397,7 @@ export default function ProductsPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowModal(false);
-                  setEditingProduct(null);
-                }}
+                onClick={closeModal}
                 className="md:col-span-2 bg-zinc-800 rounded-2xl py-4 font-bold"
               >
                 Cancelar
