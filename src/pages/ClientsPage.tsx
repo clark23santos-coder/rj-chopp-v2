@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2, Phone, Mail, MapPin } from 'lucide-react';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
+import { addAuditLog } from '../services/audit';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -72,8 +73,22 @@ export default function ClientsPage() {
           data,
           authHeaders()
         );
+
+        addAuditLog({
+          area: 'Clientes',
+          action: 'UPDATE',
+          title: `Cliente editado: ${data.name}`,
+          description: `Telefone: ${data.phone || '-'}\nEmail: ${data.email || '-'}\nEndereço: ${data.address || '-'}`,
+        });
       } else {
         await api.post('/clients', data, authHeaders());
+
+        addAuditLog({
+          area: 'Clientes',
+          action: 'CREATE',
+          title: `Cliente criado: ${data.name}`,
+          description: `Telefone: ${data.phone || '-'}\nEmail: ${data.email || '-'}\nEndereço: ${data.address || '-'}`,
+        });
       }
 
       setShowModal(false);
@@ -103,6 +118,13 @@ export default function ClientsPage() {
       await api.delete(`/clients/${client.id}`, authHeaders());
 
       await loadClients();
+
+      addAuditLog({
+        area: 'Clientes',
+        action: 'DELETE',
+        title: `Cliente apagado: ${client.name || 'Cliente'}`,
+        description: `Telefone: ${client.phone || '-'}\nEmail: ${client.email || '-'}\nEndereço: ${client.address || '-'}`,
+      });
 
       alert('Cliente apagado com sucesso.');
     } catch (error) {

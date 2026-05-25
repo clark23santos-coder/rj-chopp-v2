@@ -5,6 +5,7 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { api } from '../services/api';
+import { addAuditLog } from '../services/audit';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -96,6 +97,13 @@ export default function ExpensesPage() {
 
       setShowModal(false);
       await loadExpenses();
+
+      addAuditLog({
+        area: 'Despesas',
+        action: 'CREATE',
+        title: `Despesa criada: ${data.description}`,
+        description: `Categoria: ${data.category || 'Despesa'}\nValor: ${formatMoney(data.amount)}`,
+      });
     } catch (error) {
       console.log('Erro ao salvar despesa:', error);
       alert('Não foi possível salvar a despesa.');
@@ -122,6 +130,13 @@ export default function ExpensesPage() {
       );
 
       await loadExpenses();
+
+      addAuditLog({
+        area: 'Despesas',
+        action: 'DELETE',
+        title: `Despesa apagada: ${expense.description || 'Despesa'}`,
+        description: `Categoria: ${expense.category || 'Despesa'}\nValor: ${formatMoney(expense.amount)}`,
+      });
 
       alert('Despesa apagada com sucesso.');
     } catch (error) {

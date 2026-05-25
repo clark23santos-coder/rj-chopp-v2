@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
+import { addAuditLog } from '../services/audit';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -129,6 +130,13 @@ export default function FinancialPage() {
 
       setShowModal(false);
       await loadFinancial();
+
+      addAuditLog({
+        area: 'Financeiro',
+        action: 'CREATE',
+        title: `Lançamento financeiro criado: ${data.description}`,
+        description: `Tipo: ${data.type === 'OUTPUT' ? 'Saída' : 'Entrada'}\nCategoria: ${data.category || '-'}\nValor: ${formatMoney(data.amount)}`,
+      });
     } catch (error) {
       console.log('Erro ao salvar lançamento:', error);
       alert('Não foi possível salvar o lançamento financeiro.');
@@ -155,6 +163,13 @@ export default function FinancialPage() {
       );
 
       await loadFinancial();
+
+      addAuditLog({
+        area: 'Financeiro',
+        action: 'DELETE',
+        title: `Lançamento financeiro apagado: ${item.description || 'Lançamento'}`,
+        description: `Categoria: ${item.category || '-'}\nTipo: ${item.type === 'OUTPUT' ? 'Saída' : 'Entrada'}\nValor: ${formatMoney(item.amount)}`,
+      });
 
       alert('Lançamento apagado com sucesso.');
     } catch (error) {

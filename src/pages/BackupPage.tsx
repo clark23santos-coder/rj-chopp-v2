@@ -3,11 +3,13 @@ import { Download, Upload, ShieldCheck, AlertTriangle, Database } from 'lucide-r
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
+import { addAuditLog } from '../services/audit';
 
 const BACKUP_KEYS = [
   'rjchopp_company_settings',
   'rjchopp_withdrawals',
   'rjchopp_order_meta',
+  'rjchopp_audit_logs',
 ];
 
 function getTodayFileName() {
@@ -66,6 +68,13 @@ export default function BackupPage() {
 
     URL.revokeObjectURL(url);
 
+    addAuditLog({
+      area: 'Backup',
+      action: 'BACKUP',
+      title: 'Backup baixado',
+      description: `Arquivo gerado: ${getTodayFileName()}`,
+    });
+
     setLastMessage('Backup baixado com sucesso.');
   }
 
@@ -107,6 +116,13 @@ export default function BackupPage() {
         }
       });
 
+      addAuditLog({
+        area: 'Backup',
+        action: 'RESTORE',
+        title: 'Backup restaurado',
+        description: `Arquivo importado: ${file.name}`,
+      });
+
       setLastMessage('Backup restaurado com sucesso. Atualize o sistema com Ctrl + F5.');
       alert('Backup restaurado com sucesso. Atualize o sistema com Ctrl + F5.');
     } catch (error) {
@@ -128,6 +144,13 @@ export default function BackupPage() {
 
     BACKUP_KEYS.forEach((key) => {
       localStorage.removeItem(key);
+    });
+
+    addAuditLog({
+      area: 'Backup',
+      action: 'DELETE',
+      title: 'Dados locais apagados',
+      description: 'Configurações locais, retiradas e dados auxiliares locais foram apagados deste navegador.',
     });
 
     setLastMessage('Dados locais apagados. Atualize o sistema com Ctrl + F5.');

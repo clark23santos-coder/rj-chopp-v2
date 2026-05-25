@@ -3,6 +3,7 @@ import { Save, Building2, Phone, MapPin, FileText } from 'lucide-react';
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
+import { addAuditLog } from '../services/audit';
 
 const STORAGE_KEY = 'rjchopp_company_settings';
 
@@ -55,6 +56,13 @@ export default function SettingsPage() {
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 
+    addAuditLog({
+      area: 'Configurações',
+      action: 'SETTINGS',
+      title: 'Configurações da empresa salvas',
+      description: `Empresa: ${settings.companyName || '-'}\nTelefone: ${settings.phone || '-'}\nCidade: ${settings.city || '-'}\nDocumento: ${settings.document || '-'}`,
+    });
+
     alert('Configurações salvas com sucesso.');
   }
 
@@ -69,6 +77,13 @@ export default function SettingsPage() {
 
     setSettings(defaultSettings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultSettings));
+
+    addAuditLog({
+      area: 'Configurações',
+      action: 'SETTINGS',
+      title: 'Configurações restauradas para o padrão',
+      description: 'Os dados da empresa voltaram para o padrão do sistema.',
+    });
 
     alert('Configurações restauradas.');
   }

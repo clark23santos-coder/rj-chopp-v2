@@ -17,6 +17,7 @@ import {
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
+import { addAuditLog } from '../services/audit';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -416,6 +417,15 @@ export default function MapPage() {
       return;
     }
 
+    addAuditLog({
+      area: 'Mapa',
+      action: 'CREATE',
+      title: `Rota criada com ${selectedRouteLocations.length} parada(s)`,
+      description: selectedRouteLocations
+        .map((location: any, index: number) => `${index + 1}. ${location.title} - ${location.address}`)
+        .join('\n'),
+    });
+
     window.open(url, '_blank');
   }
 
@@ -451,6 +461,14 @@ export default function MapPage() {
     writeStorage(WITHDRAWALS_STORAGE_KEY, updatedWithdrawals);
     setSelectedRouteIds((current) => current.filter((id) => id !== location.id));
     setSelectedLocation(null);
+
+    addAuditLog({
+      area: 'Mapa',
+      action: 'WITHDRAWAL_OK',
+      title: `Retirada OK pelo mapa: ${location.title || 'Cliente não informado'}`,
+      description: `Buscar: ${location.item || '-'}\nEndereço: ${location.address || '-'}\nData: ${formatDate(location.pickupDate)}`,
+    });
+
     alert('Retirada marcada como OK.');
   }
 
@@ -463,6 +481,13 @@ export default function MapPage() {
       `Data: ${formatDate(location.pickupDate)}`,
       `Observação: ${location.observation || '-'}`,
     ].join('\n');
+
+    addAuditLog({
+      area: 'Mapa',
+      action: 'UPDATE',
+      title: `Nota de retirada aberta: ${location.title || 'Cliente não informado'}`,
+      description: message,
+    });
 
     alert(message);
   }

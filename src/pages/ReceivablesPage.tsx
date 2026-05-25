@@ -5,6 +5,7 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { api } from '../services/api';
+import { addAuditLog } from '../services/audit';
 
 function formatMoney(value: any) {
   return new Intl.NumberFormat('pt-BR', {
@@ -76,6 +77,13 @@ export default function ReceivablesPage() {
       );
 
       await loadOrders();
+
+      addAuditLog({
+        area: 'Financeiro',
+        action: 'FINISHED',
+        title: `Fiado recebido: ${order.client?.name || 'Cliente não informado'}`,
+        description: `Pedido #${String(order.id || '').slice(0, 8).toUpperCase()}\nValor recebido: ${formatMoney(order.total)}\nPagamento marcado como PAGO.`,
+      });
 
       alert('Pagamento marcado como recebido.');
     } catch (error) {

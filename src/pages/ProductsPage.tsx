@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
+import { addAuditLog } from '../services/audit';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -104,8 +105,22 @@ export default function ProductsPage() {
 
       if (editingProduct) {
         await api.put(`/products/${editingProduct.id}`, data, authHeaders());
+
+        addAuditLog({
+          area: 'Produtos',
+          action: 'UPDATE',
+          title: `Produto editado: ${data.name}`,
+          description: `Categoria: ${data.category || '-'}\nMarca: ${data.brand || '-'}\nEstoque: ${data.stock} ${data.unit || ''}\nVenda: ${formatMoney(data.salePrice)}`,
+        });
       } else {
         await api.post('/products', data, authHeaders());
+
+        addAuditLog({
+          area: 'Produtos',
+          action: 'CREATE',
+          title: `Produto criado: ${data.name}`,
+          description: `Categoria: ${data.category || '-'}\nMarca: ${data.brand || '-'}\nEstoque: ${data.stock} ${data.unit || ''}\nVenda: ${formatMoney(data.salePrice)}`,
+        });
       }
 
       closeModal();
@@ -133,6 +148,13 @@ export default function ProductsPage() {
       await api.delete(`/products/${product.id}`, authHeaders());
 
       await loadProducts();
+
+      addAuditLog({
+        area: 'Produtos',
+        action: 'DELETE',
+        title: `Produto apagado: ${product.name || 'Produto'}`,
+        description: `Categoria: ${product.category || '-'}\nMarca: ${product.brand || '-'}\nEstoque anterior: ${product.stock || 0} ${product.unit || ''}`,
+      });
 
       alert('Produto apagado com sucesso.');
     } catch (error) {
