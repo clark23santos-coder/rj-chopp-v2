@@ -5,6 +5,7 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { addAuditLog } from '../services/audit';
+import { addOfflineAction, isOnline } from '../services/offline';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -100,6 +101,14 @@ export default function WithdrawalsPage() {
 
     saveToStorage([newWithdrawal, ...withdrawals]);
 
+    if (!isOnline()) {
+      addOfflineAction({
+        type: 'CREATE_WITHDRAWAL',
+        title: `Criar retirada offline: ${newWithdrawal.client}`,
+        payload: newWithdrawal,
+      });
+    }
+
     addAuditLog({
       area: 'Retiradas',
       action: 'CREATE',
@@ -132,6 +141,17 @@ export default function WithdrawalsPage() {
     );
 
     saveToStorage(updated);
+
+    if (!isOnline() && currentWithdrawal) {
+      addOfflineAction({
+        type: 'WITHDRAWAL_OK',
+        title: `Retirada OK offline: ${currentWithdrawal.client || 'Cliente não informado'}`,
+        payload: {
+          id,
+          finishedAt: new Date().toISOString(),
+        },
+      });
+    }
 
     addAuditLog({
       area: 'Retiradas',

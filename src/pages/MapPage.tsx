@@ -18,6 +18,7 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
 import { addAuditLog } from '../services/audit';
+import { addOfflineAction, isOnline } from '../services/offline';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -461,6 +462,17 @@ export default function MapPage() {
     writeStorage(WITHDRAWALS_STORAGE_KEY, updatedWithdrawals);
     setSelectedRouteIds((current) => current.filter((id) => id !== location.id));
     setSelectedLocation(null);
+
+    if (!isOnline()) {
+      addOfflineAction({
+        type: 'WITHDRAWAL_OK',
+        title: `Retirada OK offline pelo mapa: ${location.title || 'Cliente não informado'}`,
+        payload: {
+          id: location.originalId,
+          finishedAt: new Date().toISOString(),
+        },
+      });
+    }
 
     addAuditLog({
       area: 'Mapa',

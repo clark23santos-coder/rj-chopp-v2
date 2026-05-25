@@ -1,15 +1,13 @@
 {
-  "id": "/",
   "name": "RJ Chopp SGE",
   "short_name": "RJ Chopp",
-  "description": "Sistema de gestão da RJ Chopp para pedidos, estoque, entregas, retiradas, financeiro e relatórios.",
+  "description": "Sistema de gestão da RJ Chopp",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#09090b",
+  "background_color": "#000000",
   "theme_color": "#facc15",
-  "categories": ["business", "productivity"],
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -22,6 +20,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

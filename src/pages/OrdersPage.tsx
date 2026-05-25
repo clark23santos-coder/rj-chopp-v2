@@ -14,6 +14,12 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
 import { addAuditLog } from '../services/audit';
+import {
+  addOfflineAction,
+  getOfflineOrders,
+  isOnline,
+  saveOfflineOrder,
+} from '../services/offline';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -359,12 +365,18 @@ export default function OrdersPage() {
           api.get('/products', authHeaders()),
         ]);
 
-      setOrders(Array.isArray(ordersResponse.data) ? ordersResponse.data : []);
+      const onlineOrders = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
+      const offlineOrders = getOfflineOrders();
+
+      setOrders([
+        ...offlineOrders,
+        ...onlineOrders,
+      ]);
       setClients(Array.isArray(clientsResponse.data) ? clientsResponse.data : []);
       setProducts(Array.isArray(productsResponse.data) ? productsResponse.data : []);
     } catch (error) {
       console.log('Erro ao carregar pedidos:', error);
-      setOrders([]);
+      setOrders(getOfflineOrders());
       setClients([]);
       setProducts([]);
     }
@@ -620,6 +632,40 @@ export default function OrdersPage() {
     return getProductDisplayName(product);
   }
 
+  function createOfflineOrder(data: any, metaData: any) {
+    const client = clients.find((clientItem) => clientItem.id === data.clientId);
+
+    const offlineItems = data.items.map((item: any) => {
+      const product = products.find(
+        (productItem) => productItem.id === item.productId
+      );
+
+      return {
+        id: `${Date.now()}-${item.productId}`,
+        productId: item.productId,
+        product,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total,
+      };
+    });
+
+    return {
+      id: `offline-${Date.now()}`,
+      clientId: data.clientId,
+      client,
+      status: data.status || 'PENDING',
+      total: data.total,
+      paymentMethod: data.paymentMethod,
+      note: data.note,
+      items: offlineItems,
+      stockDiscounted: data.discountStockNow,
+      createdAt: new Date().toISOString(),
+      offlinePending: true,
+      metaData,
+    };
+  }
+
   async function saveOrder(event: any) {
     event.preventDefault();
 
@@ -685,6 +731,68 @@ export default function OrdersPage() {
       };
 
       console.log('Descontar estoque agora?', data.discountStockNow);
+
+      if (!isOnline() && !editingOrder) {
+        const offlineOrder = createOfflineOrder(data, {
+          deliveryDate,
+          observation,
+          pickupDate: '',
+          returnItems: '',
+          stockDiscounted: discountStockNow,
+        });
+
+        saveOfflineOrder(offlineOrder);
+
+        saveOrderMeta(offlineOrder.id, {
+          deliveryDate,
+          observation,
+          pickupDate: '',
+          returnItems: '',
+          stockDiscounted: discountStockNow,
+        });
+
+        addOfflineAction({
+          type: 'CREATE_ORDER',
+          title: 'Criar pedido offline',
+          payload: {
+            tempOrderId: offlineOrder.id,
+            data,
+            meta: {
+              deliveryDate,
+              observation,
+              pickupDate: '',
+              returnItems: '',
+              stockDiscounted: discountStockNow,
+            },
+            config: authHeaders(),
+          },
+        });
+
+        addAuditLog({
+          area: 'Pedidos',
+          action: 'CREATE',
+          title: `Pedido criado offline: ${offlineOrder.client?.name || 'Cliente não informado'}`,
+          description: `Total: ${formatMoney(total)}\nEntrega: ${formatDate(deliveryDate)}\nEsse pedido será sincronizado quando a internet voltar.`,
+        });
+
+        setOrders([offlineOrder, ...orders]);
+        setShowModal(false);
+        setEditingOrder(null);
+        setOrderItems([
+          {
+            productId: '',
+            quantity: 1,
+          },
+        ]);
+
+        alert('Pedido salvo offline. Quando a internet voltar, o sistema vai sincronizar.');
+        return;
+      }
+
+      if (!isOnline() && editingOrder) {
+        alert('Editar pedido offline ainda não está liberado. Conecte na internet para editar.');
+        return;
+      }
 
       if (editingOrder) {
         await api.put(
@@ -1183,6 +1291,13 @@ export default function OrdersPage() {
                   >
                     <td className="p-5 font-bold">
                       {order.client?.name || 'Cliente não informado'}
+
+                      {order.offlinePending && (
+                        <p className="text-xs text-yellow-400 font-black mt-1">
+                          Pendente de sincronizar
+                        </p>
+                      )}
+
                       <p className="text-xs text-zinc-500 mt-1">
                         {order.client?.address || 'Sem endereço'}
                       </p>
@@ -1290,8 +1405,9 @@ export default function OrdersPage() {
                         </button>
 
                         <button
+                          disabled={order.offlinePending}
                           onClick={() => openEditOrder(order)}
-                          className="bg-zinc-800 hover:bg-zinc-700 rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2"
+                          className="bg-zinc-800 hover:bg-zinc-700 rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
                         >
                           <Pencil size={17} />
                           Editar
@@ -1299,8 +1415,9 @@ export default function OrdersPage() {
 
                         {status !== 'APPROVED' && status !== 'FINISHED' && (
                           <button
+                            disabled={order.offlinePending}
                             onClick={() => openDeliveryModal(order)}
-                            className="bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2"
+                            className="bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
                           >
                             <Truck size={17} />
                             Foi entregue

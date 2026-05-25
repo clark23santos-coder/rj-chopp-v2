@@ -1,13 +1,30 @@
-const CACHE_NAME = 'rjchopp-sge-v2';
+const CACHE_NAME = 'rjchopp-sge-v3';
+
+const APP_SHELL = [
+  '/',
+  '/index.html',
+  '/manifest.webmanifest',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
+];
 
 self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+  );
+
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
-      return Promise.all(keys.map((key) => caches.delete(key)));
+      return Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      );
     })
   );
 
@@ -15,5 +32,35 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  event.respondWith(fetch(event.request));
+  const request = event.request;
+  const url = new URL(request.url);
+
+  if (url.pathname.startsWith('/api') || url.port === '3333') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      return (
+        cached ||
+        fetch(request).then((response) => {
+          const copy = response.clone();
+
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, copy);
+          });
+
+          return response;
+        })
+      );
+    })
+  );
 });
