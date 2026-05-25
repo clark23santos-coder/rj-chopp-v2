@@ -19,6 +19,7 @@ import SettingsPage from '../pages/SettingsPage';
 import BackupPage from '../pages/BackupPage';
 import LoginPage from '../pages/LoginPage';
 import MapPage from '../pages/MapPage';
+import AuditPage from '../pages/AuditPage';
 import ProtectedRoute from './ProtectedRoute';
 
 function protect(page: any, roles: string[]) {
@@ -93,6 +94,11 @@ export default function AppRoutes() {
         <Route
           path="/relatorios"
           element={protect(<ReportsPage />, ['ADMIN', 'FINANCE'])}
+        />
+
+        <Route
+          path="/historico"
+          element={protect(<AuditPage />, ['ADMIN'])}
         />
 
         <Route

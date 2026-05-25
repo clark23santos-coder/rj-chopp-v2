@@ -13,6 +13,7 @@ import {
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
+import { addAuditLog } from '../services/audit';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -697,6 +698,13 @@ export default function OrdersPage() {
           observation,
           stockDiscounted: hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id)),
         });
+
+        addAuditLog({
+          area: 'Pedidos',
+          action: 'UPDATE',
+          title: `Pedido editado: ${editingOrder.client?.name || 'Cliente não informado'}`,
+          description: `Total: ${formatMoney(total)}\nEntrega: ${formatDate(deliveryDate)}\nPagamento: ${paymentMethod || '-'}`,
+        });
       } else {
         const response = await api.post('/orders', data, authHeaders());
 
@@ -707,6 +715,15 @@ export default function OrdersPage() {
             pickupDate: '',
             returnItems: '',
             stockDiscounted: discountStockNow,
+          });
+
+          const client = clients.find((clientItem) => clientItem.id === clientId);
+
+          addAuditLog({
+            area: 'Pedidos',
+            action: 'CREATE',
+            title: `Pedido criado: ${client?.name || 'Cliente não informado'}`,
+            description: `Total: ${formatMoney(total)}\nEntrega: ${formatDate(deliveryDate)}\nPagamento: ${paymentMethod || '-'}\nEstoque: ${discountStockNow ? 'Baixado agora' : 'Agendado sem baixar estoque'}`,
           });
         }
       }
@@ -831,6 +848,20 @@ export default function OrdersPage() {
 
       await loadData();
 
+      addAuditLog({
+        area: 'Pedidos',
+        action: 'DELIVERED',
+        title: `Pedido entregue: ${deliveryOrder.client?.name || 'Cliente não informado'}`,
+        description: `Retirada agendada para ${formatDate(pickupDate)}\nItens para buscar: ${returnItems}`,
+      });
+
+      addAuditLog({
+        area: 'Retiradas',
+        action: 'CREATE',
+        title: `Retirada criada pelo pedido: ${deliveryOrder.client?.name || 'Cliente não informado'}`,
+        description: `Buscar em: ${formatDate(pickupDate)}\nItens: ${returnItems}`,
+      });
+
       alert('Pedido marcado como entregue e retirada agendada.');
     } catch (error) {
       console.log('Erro ao confirmar entrega:', error);
@@ -856,6 +887,13 @@ export default function OrdersPage() {
 
       await loadData();
 
+      addAuditLog({
+        area: 'Pedidos',
+        action: 'FINISHED',
+        title: `Pedido finalizado: ${order.client?.name || 'Cliente não informado'}`,
+        description: `Pedido #${getShortId(order.id)} finalizado.`,
+      });
+
       alert('Pedido finalizado.');
     } catch (error) {
       console.log('Erro ao finalizar pedido:', error);
@@ -880,6 +918,13 @@ export default function OrdersPage() {
       await updateOrderStatus(order, 'cancelado');
 
       await loadData();
+
+      addAuditLog({
+        area: 'Pedidos',
+        action: 'CANCELLED',
+        title: `Pedido cancelado: ${order.client?.name || 'Cliente não informado'}`,
+        description: `Pedido #${getShortId(order.id)} cancelado.`,
+      });
 
       alert('Pedido cancelado.');
     } catch (error) {
@@ -914,6 +959,13 @@ export default function OrdersPage() {
       writeStorage(WITHDRAWALS_STORAGE_KEY, updatedWithdrawals);
 
       await loadData();
+
+      addAuditLog({
+        area: 'Pedidos',
+        action: 'DELETE',
+        title: `Pedido apagado: ${order.client?.name || 'Cliente não informado'}`,
+        description: `Pedido #${getShortId(order.id)} apagado. Total: ${formatMoney(order.total)}`,
+      });
 
       alert('Pedido apagado com sucesso.');
     } catch (error) {

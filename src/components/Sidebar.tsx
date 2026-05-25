@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPinned,
+  History,
   X,
 } from 'lucide-react';
 
@@ -121,6 +122,12 @@ const menuItems = [
     label: 'Relatórios',
     icon: BarChart3,
     roles: ['ADMIN', 'FINANCE'],
+  },
+  {
+    to: '/historico',
+    label: 'Histórico',
+    icon: History,
+    roles: ['ADMIN'],
   },
   {
     to: '/configuracoes',

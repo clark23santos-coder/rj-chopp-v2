@@ -4,6 +4,7 @@ import { Plus, Trash2, CheckCircle, AlertTriangle, CalendarDays } from 'lucide-r
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import { addAuditLog } from '../services/audit';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
@@ -98,6 +99,14 @@ export default function WithdrawalsPage() {
     }
 
     saveToStorage([newWithdrawal, ...withdrawals]);
+
+    addAuditLog({
+      area: 'Retiradas',
+      action: 'CREATE',
+      title: `Retirada criada: ${newWithdrawal.client}`,
+      description: `Buscar em: ${formatDate(newWithdrawal.pickupDate)}\nItens: ${newWithdrawal.item}\nEndereço: ${newWithdrawal.address || '-'}`,
+    });
+
     setShowModal(false);
   }
 
@@ -110,6 +119,8 @@ export default function WithdrawalsPage() {
       return;
     }
 
+    const currentWithdrawal = withdrawals.find((item) => item.id === id);
+
     const updated = withdrawals.map((item) =>
       item.id === id
         ? {
@@ -121,6 +132,13 @@ export default function WithdrawalsPage() {
     );
 
     saveToStorage(updated);
+
+    addAuditLog({
+      area: 'Retiradas',
+      action: 'WITHDRAWAL_OK',
+      title: `Retirada OK: ${currentWithdrawal?.client || 'Cliente não informado'}`,
+      description: `Itens: ${currentWithdrawal?.item || '-'}\nBuscar: ${formatDate(currentWithdrawal?.pickupDate)}\nEndereço: ${currentWithdrawal?.address || '-'}`,
+    });
   }
 
   function reopenWithdrawal(id: string) {
@@ -131,6 +149,8 @@ export default function WithdrawalsPage() {
     if (!confirmAction) {
       return;
     }
+
+    const currentWithdrawal = withdrawals.find((item) => item.id === id);
 
     const updated = withdrawals.map((item) =>
       item.id === id
@@ -143,6 +163,13 @@ export default function WithdrawalsPage() {
     );
 
     saveToStorage(updated);
+
+    addAuditLog({
+      area: 'Retiradas',
+      action: 'UPDATE',
+      title: `Retirada reaberta: ${currentWithdrawal?.client || 'Cliente não informado'}`,
+      description: `Itens: ${currentWithdrawal?.item || '-'}\nBuscar: ${formatDate(currentWithdrawal?.pickupDate)}`,
+    });
   }
 
   function deleteWithdrawal(id: string) {
@@ -154,8 +181,17 @@ export default function WithdrawalsPage() {
       return;
     }
 
+    const currentWithdrawal = withdrawals.find((item) => item.id === id);
+
     const updated = withdrawals.filter((item) => item.id !== id);
     saveToStorage(updated);
+
+    addAuditLog({
+      area: 'Retiradas',
+      action: 'DELETE',
+      title: `Retirada apagada: ${currentWithdrawal?.client || 'Cliente não informado'}`,
+      description: `Itens: ${currentWithdrawal?.item || '-'}\nBuscar: ${formatDate(currentWithdrawal?.pickupDate)}`,
+    });
   }
 
   const filteredWithdrawals = withdrawals.filter((item) => {
