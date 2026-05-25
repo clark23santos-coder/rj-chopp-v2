@@ -274,6 +274,21 @@ function isScheduledForToday(order: any, meta: any, today: string) {
   return deliveryDate === today;
 }
 
+function isLateScheduledOrder(order: any, meta: any, today: string) {
+  const status = String(order.status || '').toUpperCase();
+  const deliveryDate = String(meta.deliveryDate || '');
+
+  if (!deliveryDate) {
+    return false;
+  }
+
+  if (status !== 'PENDING') {
+    return false;
+  }
+
+  return deliveryDate < today;
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -408,6 +423,7 @@ export default function OrdersPage() {
     const deliveredAndWaitingPickup = orderStatus === 'APPROVED';
     const futureScheduledOrder = isFutureScheduledOrder(order, meta, today);
     const scheduledForToday = isScheduledForToday(order, meta, today);
+    const lateScheduledOrder = isLateScheduledOrder(order, meta, today);
 
     if (statusFilter === 'AGENDADO') {
       const matchesPayment =
@@ -415,6 +431,14 @@ export default function OrdersPage() {
         String(order.paymentMethod || '').toUpperCase() === paymentFilter;
 
       return matchesSearch && matchesPayment && futureScheduledOrder;
+    }
+
+    if (statusFilter === 'ATRASADO') {
+      const matchesPayment =
+        !paymentFilter ||
+        String(order.paymentMethod || '').toUpperCase() === paymentFilter;
+
+      return matchesSearch && matchesPayment && lateScheduledOrder;
     }
 
     const shouldHideDeliveredFromOrders =
@@ -456,7 +480,7 @@ export default function OrdersPage() {
         meta.pickupDate &&
         meta.pickupDate > today);
 
-    if (!statusFilter && scheduledForToday) {
+    if (!statusFilter && (scheduledForToday || lateScheduledOrder)) {
       return matchesSearch && matchesPayment && matchesReturn;
     }
 
@@ -1036,6 +1060,7 @@ export default function OrdersPage() {
           >
             <option value="">Pedidos em aberto</option>
             <option value="AGENDADO">Pedidos agendados</option>
+            <option value="ATRASADO">Pedidos atrasados</option>
             <option value="PENDING">Pendente</option>
             <option value="APPROVED">Entregue / em retirada</option>
             <option value="FINISHED">Finalizado</option>
@@ -1095,9 +1120,15 @@ export default function OrdersPage() {
               {filteredOrders.map((order) => {
                 const meta = getOrderMeta(order.id);
                 const status = String(order.status || '').toUpperCase();
+                const lateScheduledOrder = isLateScheduledOrder(order, meta, today);
 
                 return (
-                  <tr key={order.id} className="border-t border-zinc-800">
+                  <tr
+                    key={order.id}
+                    className={`border-t border-zinc-800 ${
+                      lateScheduledOrder ? 'bg-red-500/10' : ''
+                    }`}
+                  >
                     <td className="p-5 font-bold">
                       {order.client?.name || 'Cliente não informado'}
                       <p className="text-xs text-zinc-500 mt-1">
@@ -1112,6 +1143,12 @@ export default function OrdersPage() {
                     <td className="p-5 text-zinc-400">
                       <div>
                         <p>{formatDate(meta.deliveryDate)}</p>
+
+                        {lateScheduledOrder && (
+                          <p className="text-xs text-red-400 font-black mt-1">
+                            Pedido atrasado
+                          </p>
+                        )}
 
                         {isFutureScheduledOrder(order, meta, today) && (
                           <p className="text-xs text-blue-400 font-bold mt-1">
@@ -1161,17 +1198,27 @@ export default function OrdersPage() {
                     </td>
 
                     <td className="p-5">
-                      <span
-                        className={`${getStatusClass(order.status)} px-4 py-2 rounded-full text-sm font-bold`}
-                      >
-                        {getStatusLabel(order.status)}
-                      </span>
+                      {lateScheduledOrder ? (
+                        <span className="bg-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-black">
+                          Pedido atrasado
+                        </span>
+                      ) : (
+                        <span
+                          className={`${getStatusClass(order.status)} px-4 py-2 rounded-full text-sm font-bold`}
+                        >
+                          {getStatusLabel(order.status)}
+                        </span>
+                      )}
                     </td>
 
                     <td className="p-5">
                       {hasStockAlreadyDiscounted(order, meta) ? (
                         <span className="bg-green-500/20 text-green-400 px-4 py-2 rounded-full text-sm font-bold">
                           Baixado
+                        </span>
+                      ) : lateScheduledOrder ? (
+                        <span className="bg-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-bold">
+                          Atrasado
                         </span>
                       ) : (
                         <span className="bg-blue-500/20 text-blue-400 px-4 py-2 rounded-full text-sm font-bold">

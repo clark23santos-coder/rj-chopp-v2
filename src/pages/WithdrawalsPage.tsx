@@ -43,6 +43,7 @@ function isToday(date: string, status: string) {
 export default function WithdrawalsPage() {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
@@ -160,13 +161,21 @@ export default function WithdrawalsPage() {
   const filteredWithdrawals = withdrawals.filter((item) => {
     const text = search.toLowerCase();
 
-    return (
+    const matchesSearch =
       item.client?.toLowerCase().includes(text) ||
       item.phone?.toLowerCase().includes(text) ||
       item.address?.toLowerCase().includes(text) ||
       item.item?.toLowerCase().includes(text) ||
-      item.observation?.toLowerCase().includes(text)
-    );
+      item.observation?.toLowerCase().includes(text);
+
+    const matchesStatus =
+      !statusFilter ||
+      (statusFilter === 'ATRASADO' && isLate(item.pickupDate, item.status)) ||
+      (statusFilter === 'HOJE' && isToday(item.pickupDate, item.status)) ||
+      (statusFilter === 'PENDENTE' && item.status !== 'RETIRADO') ||
+      (statusFilter === 'RETIRADO' && item.status === 'RETIRADO');
+
+    return matchesSearch && matchesStatus;
   });
 
   const pending = useMemo(() => {
@@ -196,6 +205,35 @@ export default function WithdrawalsPage() {
         description="Controle de cascos, barris e chopeiras para buscar"
       />
 
+      {late.length > 0 && (
+        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-6 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="bg-red-500 text-white rounded-2xl p-4">
+                <AlertTriangle size={32} />
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-black text-red-400">
+                  {late.length} retirada(s) atrasada(s)
+                </h2>
+
+                <p className="text-zinc-300 font-bold">
+                  Priorize essas buscas antes das próximas entregas.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setStatusFilter('ATRASADO')}
+              className="bg-red-500 text-white rounded-2xl px-6 py-3 font-black"
+            >
+              Ver atrasadas
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-4 gap-6 mb-8">
         <Card title="Pendentes" value={pending.length} />
         <Card title="Buscar hoje" value={today.length} />
@@ -203,13 +241,25 @@ export default function WithdrawalsPage() {
         <Card title="Retiradas feitas" value={finished.length} />
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 mb-8">
+      <div className="grid md:grid-cols-[1fr_220px_auto] gap-4 mb-8">
         <input
           placeholder="Pesquisar por cliente, telefone, endereço ou item..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className={inputClass}
         />
+
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          className={inputClass}
+        >
+          <option value="">Todas</option>
+          <option value="ATRASADO">Atrasadas</option>
+          <option value="HOJE">Buscar hoje</option>
+          <option value="PENDENTE">Pendentes</option>
+          <option value="RETIRADO">Retiradas feitas</option>
+        </select>
 
         <button
           onClick={() => setShowModal(true)}
@@ -237,7 +287,14 @@ export default function WithdrawalsPage() {
 
           <tbody>
             {filteredWithdrawals.map((item) => (
-              <tr key={item.id} className="border-t border-zinc-800">
+              <tr
+                key={item.id}
+                className={`border-t border-zinc-800 ${
+                  isLate(item.pickupDate, item.status)
+                    ? 'bg-red-500/10'
+                    : ''
+                }`}
+              >
                 <td className="p-5 font-bold">
                   {item.client}
                 </td>

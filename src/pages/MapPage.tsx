@@ -9,6 +9,9 @@ import {
   Truck,
   Route,
   X,
+  AlertTriangle,
+  CheckCircle,
+  FileText,
 } from 'lucide-react';
 
 import Layout from '../components/Layout';
@@ -33,6 +36,24 @@ function readStorage(key: string, fallback: any) {
   } catch {
     return fallback;
   }
+}
+
+function writeStorage(key: string, value: any) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function formatDate(value: any) {
+  if (!value) {
+    return '-';
+  }
+
+  const date = new Date(`${value}T12:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+
+  return date.toLocaleDateString('pt-BR');
 }
 
 function getCurrentUser() {
@@ -143,6 +164,25 @@ function getTypeConfig(type: string) {
   };
 }
 
+function isLateOrder(order: any) {
+  const status = String(order.status || '').toUpperCase();
+  const meta = getOrderMeta(order.id);
+  const deliveryDate =
+    getDateKey(meta.deliveryDate) ||
+    getDateKey(order.deliveryDate) ||
+    getDateKey(order.createdAt);
+
+  if (!deliveryDate) {
+    return false;
+  }
+
+  if (status !== 'PENDING' && status !== '' && status !== 'PENDENTE') {
+    return false;
+  }
+
+  return deliveryDate < getToday();
+}
+
 function isOpenOrder(order: any) {
   const status = String(order.status || '').toUpperCase();
 
@@ -151,6 +191,16 @@ function isOpenOrder(order: any) {
     status === '' ||
     status === 'PENDENTE'
   );
+}
+
+function isLateWithdrawal(withdrawal: any) {
+  const status = String(withdrawal.status || '').toUpperCase();
+
+  if (!withdrawal.pickupDate || status === 'RETIRADO') {
+    return false;
+  }
+
+  return getDateKey(withdrawal.pickupDate) < getToday();
 }
 
 function isOpenWithdrawal(withdrawal: any) {
@@ -226,7 +276,7 @@ export default function MapPage() {
           getDateKey(order.deliveryDate) ||
           getDateKey(order.createdAt);
 
-        return deliveryDate === today;
+        return deliveryDate === today || deliveryDate < today;
       })
       .map((order) => {
         const meta = getOrderMeta(order.id);
@@ -241,6 +291,7 @@ export default function MapPage() {
           status: order.status || 'Pendente',
           date: meta.deliveryDate || getDateKey(order.createdAt),
           item: '',
+          isLate: isLateOrder(order),
         };
       });
 
@@ -256,10 +307,14 @@ export default function MapPage() {
           return false;
         }
 
-        return getDateKey(withdrawal.pickupDate) === today;
+        const pickupDate = getDateKey(withdrawal.pickupDate);
+
+        return pickupDate === today || pickupDate < today;
       })
       .map((withdrawal) => ({
         id: `withdrawal-${withdrawal.id}`,
+        originalId: withdrawal.id,
+        orderId: withdrawal.orderId || '',
         type: 'WITHDRAWAL',
         title: withdrawal.client || 'Cliente da retirada',
         subtitle: withdrawal.phone || 'Sem telefone',
@@ -268,6 +323,8 @@ export default function MapPage() {
         status: withdrawal.status || 'PENDENTE',
         pickupDate: withdrawal.pickupDate || '',
         item: withdrawal.item || '',
+        observation: withdrawal.observation || '',
+        isLate: isLateWithdrawal(withdrawal),
       }));
 
     return [
@@ -366,14 +423,88 @@ export default function MapPage() {
     setSelectedRouteIds([]);
   }
 
+  function confirmWithdrawalFromMap(location: any) {
+    if (!location?.originalId) {
+      alert('Essa retirada não foi encontrada.');
+      return;
+    }
+
+    const confirmAction = window.confirm(
+      'Confirmar que essa retirada já foi feita?'
+    );
+
+    if (!confirmAction) {
+      return;
+    }
+
+    const updatedWithdrawals = withdrawals.map((item) =>
+      item.id === location.originalId
+        ? {
+            ...item,
+            status: 'RETIRADO',
+            finishedAt: new Date().toISOString(),
+          }
+        : item
+    );
+
+    setWithdrawals(updatedWithdrawals);
+    writeStorage(WITHDRAWALS_STORAGE_KEY, updatedWithdrawals);
+    setSelectedRouteIds((current) => current.filter((id) => id !== location.id));
+    setSelectedLocation(null);
+    alert('Retirada marcada como OK.');
+  }
+
+  function openWithdrawalNote(location: any) {
+    const message = [
+      `Cliente: ${location.title || '-'}`,
+      `Telefone: ${location.phone || '-'}`,
+      `Endereço: ${location.address || '-'}`,
+      `Buscar: ${location.item || '-'}`,
+      `Data: ${formatDate(location.pickupDate)}`,
+      `Observação: ${location.observation || '-'}`,
+    ].join('\n');
+
+    alert(message);
+  }
+
+  const lateOrdersCount = locations.filter(
+    (location) => location.type === 'ORDER' && location.isLate
+  ).length;
+
+  const lateWithdrawalsCount = locations.filter(
+    (location) => location.type === 'WITHDRAWAL' && location.isLate
+  ).length;
+
   const activeAddress = selectedLocation?.address || '';
 
   return (
     <Layout>
       <PageHeader
         title="Mapa"
-        description="Rotas de hoje com pedidos pendentes e retiradas do dia"
+        description="Rotas de hoje e retiradas atrasadas"
       />
+
+      {lateOrdersCount > 0 && (
+        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-5 mb-6">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={26} className="text-red-400" />
+            <p className="font-black text-red-400">
+              {lateOrdersCount} pedido(s) atrasado(s) aparecem no mapa para priorizar a entrega.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {lateWithdrawalsCount > 0 && (
+        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-5 mb-6">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={26} className="text-red-400" />
+            <p className="font-black text-red-400">
+              {lateWithdrawalsCount} retirada(s) atrasada(s) aparecem no mapa para priorizar a rota.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-[450px_1fr] gap-6">
         <div className="space-y-5">
@@ -397,7 +528,7 @@ export default function MapPage() {
 
               {user?.role === 'DELIVERY' && (
                 <p className="text-sm text-zinc-500 mt-2">
-                  Você está vendo apenas entregas e retiradas de hoje.
+                  Você está vendo entregas de hoje/atrasadas e retiradas de hoje/atrasadas.
                 </p>
               )}
             </div>
@@ -571,9 +702,21 @@ export default function MapPage() {
                           {location.address}
                         </p>
 
+                        {location.type === 'ORDER' && location.isLate && (
+                          <p className={`mt-2 text-sm font-black ${active ? 'text-black' : 'text-red-400'}`}>
+                            ⚠ Pedido atrasado desde {formatDate(location.date)}
+                          </p>
+                        )}
+
                         {location.type === 'WITHDRAWAL' && location.item && (
                           <p className={`mt-2 text-sm font-bold ${active ? 'text-black' : 'text-green-400'}`}>
                             Buscar: {location.item}
+                          </p>
+                        )}
+
+                        {location.type === 'WITHDRAWAL' && location.isLate && (
+                          <p className={`mt-2 text-sm font-black ${active ? 'text-black' : 'text-red-400'}`}>
+                            ⚠ Retirada atrasada desde {formatDate(location.pickupDate)}
                           </p>
                         )}
                       </button>
@@ -615,9 +758,23 @@ export default function MapPage() {
                       </p>
                     )}
 
+                    {selectedLocation.type === 'ORDER' && selectedLocation.isLate && (
+                      <p className="text-red-400 font-black mt-2 flex items-center gap-2">
+                        <AlertTriangle size={18} />
+                        Pedido atrasado desde {formatDate(selectedLocation.date)}
+                      </p>
+                    )}
+
                     {selectedLocation.item && (
                       <p className="text-green-400 font-bold mt-2">
                         Buscar: {selectedLocation.item}
+                      </p>
+                    )}
+
+                    {selectedLocation.isLate && (
+                      <p className="text-red-400 font-black mt-2 flex items-center gap-2">
+                        <AlertTriangle size={18} />
+                        Retirada atrasada desde {formatDate(selectedLocation.pickupDate)}
                       </p>
                     )}
                   </div>
@@ -650,6 +807,26 @@ export default function MapPage() {
                       <Copy size={18} />
                       Copiar
                     </button>
+
+                    {selectedLocation.type === 'WITHDRAWAL' && (
+                      <button
+                        onClick={() => openWithdrawalNote(selectedLocation)}
+                        className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold flex items-center gap-2"
+                      >
+                        <FileText size={18} />
+                        Nota
+                      </button>
+                    )}
+
+                    {selectedLocation.type === 'WITHDRAWAL' && (
+                      <button
+                        onClick={() => confirmWithdrawalFromMap(selectedLocation)}
+                        className="bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-white rounded-2xl px-5 py-3 font-black flex items-center gap-2"
+                      >
+                        <CheckCircle size={18} />
+                        OK Retirada
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

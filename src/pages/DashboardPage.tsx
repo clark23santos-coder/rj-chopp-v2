@@ -11,6 +11,8 @@ import {
   Cell,
 } from 'recharts';
 
+import { AlertTriangle, CalendarDays } from 'lucide-react';
+
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
@@ -20,6 +22,79 @@ function formatMoney(value: number) {
     style: 'currency',
     currency: 'BRL',
   }).format(value || 0);
+}
+
+const WITHDRAWALS_STORAGE_KEY = 'rjchopp_withdrawals';
+const ORDER_META_STORAGE_KEY = 'rjchopp_order_meta';
+
+function readStorage(key: string, fallback: any) {
+  try {
+    const saved = localStorage.getItem(key);
+    if (!saved) return fallback;
+    return JSON.parse(saved);
+  } catch {
+    return fallback;
+  }
+}
+
+function getToday() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function formatDate(value: any) {
+  if (!value) return '-';
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('pt-BR');
+}
+
+function isLateWithdrawal(item: any) {
+  const status = String(item.status || '').toUpperCase();
+  if (!item.pickupDate || status === 'RETIRADO') return false;
+  return String(item.pickupDate) < getToday();
+}
+
+function isTodayWithdrawal(item: any) {
+  const status = String(item.status || '').toUpperCase();
+  if (!item.pickupDate || status === 'RETIRADO') return false;
+  return String(item.pickupDate) === getToday();
+}
+
+function getOrderMeta(orderId: string) {
+  const meta = readStorage(ORDER_META_STORAGE_KEY, {});
+  return meta[orderId] || {};
+}
+
+function isLateOrder(order: any) {
+  const status = String(order.status || '').toUpperCase();
+  const meta = getOrderMeta(order.id);
+  const deliveryDate = String(meta.deliveryDate || order.deliveryDate || '');
+
+  if (!deliveryDate) {
+    return false;
+  }
+
+  if (status !== 'PENDING') {
+    return false;
+  }
+
+  return deliveryDate < getToday();
+}
+
+function isTodayOrder(order: any) {
+  const status = String(order.status || '').toUpperCase();
+  const meta = getOrderMeta(order.id);
+  const deliveryDate = String(meta.deliveryDate || order.deliveryDate || '');
+
+  if (!deliveryDate) {
+    return false;
+  }
+
+  if (status !== 'PENDING') {
+    return false;
+  }
+
+  return deliveryDate === getToday();
 }
 
 function formatCompactMoney(value: number) {
@@ -69,6 +144,7 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [financial, setFinancial] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   function getToken() {
@@ -103,6 +179,9 @@ export default function DashboardPage() {
       setClients(Array.isArray(clientsResponse.data) ? clientsResponse.data : []);
       setOrders(Array.isArray(ordersResponse.data) ? ordersResponse.data : []);
       setFinancial(Array.isArray(financialResponse.data) ? financialResponse.data : []);
+
+      const withdrawalsData = readStorage(WITHDRAWALS_STORAGE_KEY, []);
+      setWithdrawals(Array.isArray(withdrawalsData) ? withdrawalsData : []);
     } catch (error) {
       console.log('Erro ao carregar dashboard:', error);
 
@@ -110,6 +189,7 @@ export default function DashboardPage() {
       setClients([]);
       setOrders([]);
       setFinancial([]);
+      setWithdrawals([]);
     } finally {
       setLoading(false);
     }
@@ -142,6 +222,10 @@ export default function DashboardPage() {
     }).length;
 
     const profit = revenue - expenses;
+    const lateWithdrawals = withdrawals.filter(isLateWithdrawal);
+    const todayWithdrawals = withdrawals.filter(isTodayWithdrawal);
+    const lateOrders = orders.filter(isLateOrder);
+    const todayOrders = orders.filter(isTodayOrder);
 
     return {
       revenue,
@@ -149,8 +233,12 @@ export default function DashboardPage() {
       profit,
       receivable,
       lowStock,
+      lateWithdrawals: lateWithdrawals.length,
+      todayWithdrawals: todayWithdrawals.length,
+      lateOrders: lateOrders.length,
+      todayOrders: todayOrders.length,
     };
-  }, [orders, financial, products]);
+  }, [orders, financial, products, withdrawals]);
 
   const financialChart = [
     { name: 'Receita', valor: totals.revenue },
@@ -176,6 +264,8 @@ export default function DashboardPage() {
     },
   ];
 
+  const lateWithdrawalsList = withdrawals.filter(isLateWithdrawal).slice(0, 5);
+  const lateOrdersList = orders.filter(isLateOrder).slice(0, 5);
   const recentOrders = orders.slice(0, 5);
 
   const lowStockProducts = products
@@ -199,11 +289,82 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid md:grid-cols-4 gap-6 mb-8">
+      {totals.lateOrders > 0 && (
+        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-6 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div className="flex items-start gap-4">
+              <div className="bg-red-500 text-white rounded-2xl p-4">
+                <AlertTriangle size={32} />
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-black text-red-400">
+                  Atenção: {totals.lateOrders} pedido(s) atrasado(s)
+                </h2>
+
+                <p className="text-zinc-300 font-bold mt-1">
+                  Existem pedidos pendentes com data de entrega vencida.
+                </p>
+              </div>
+            </div>
+
+            <a
+              href="/pedidos"
+              className="bg-red-500 text-white rounded-2xl px-6 py-3 font-black text-center"
+            >
+              Ver pedidos
+            </a>
+          </div>
+        </div>
+      )}
+
+      {totals.lateWithdrawals > 0 && (
+        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-6 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div className="flex items-start gap-4">
+              <div className="bg-red-500 text-white rounded-2xl p-4">
+                <AlertTriangle size={32} />
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-black text-red-400">
+                  Atenção: {totals.lateWithdrawals} retirada(s) atrasada(s)
+                </h2>
+
+                <p className="text-zinc-300 font-bold mt-1">
+                  Existem itens que já deveriam ter sido buscados. Confira Retiradas ou Mapa.
+                </p>
+              </div>
+            </div>
+
+            <a
+              href="/retiradas"
+              className="bg-red-500 text-white rounded-2xl px-6 py-3 font-black text-center"
+            >
+              Ver retiradas
+            </a>
+          </div>
+        </div>
+      )}
+
+      {totals.todayWithdrawals > 0 && (
+        <div className="bg-yellow-400/20 border border-yellow-400/40 rounded-3xl p-5 mb-8">
+          <div className="flex items-center gap-3">
+            <CalendarDays size={24} className="text-yellow-400" />
+            <p className="font-black text-yellow-400">
+              Hoje tem {totals.todayWithdrawals} retirada(s) para buscar.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-6 gap-6 mb-8">
         <DashboardCard title="Produtos" value={products.length} />
         <DashboardCard title="Clientes" value={clients.length} />
         <DashboardCard title="Pedidos" value={orders.length} />
         <DashboardCard title="Estoque baixo" value={totals.lowStock} />
+        <DashboardCard title="Pedidos atrasados" value={totals.lateOrders} />
+        <DashboardCard title="Retiradas atrasadas" value={totals.lateWithdrawals} />
       </div>
 
       <div className="grid md:grid-cols-4 gap-6 mb-8">
@@ -298,7 +459,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-4 gap-6">
         <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
           <h2 className="text-2xl font-black mb-6 text-yellow-400">
             Últimos pedidos
@@ -331,6 +492,60 @@ export default function DashboardPage() {
               <p className="text-zinc-500">
                 Nenhum pedido cadastrado ainda.
               </p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
+          <h2 className="text-2xl font-black mb-6 text-red-400">
+            Pedidos atrasados
+          </h2>
+
+          <div className="space-y-4">
+            {lateOrdersList.map((order) => {
+              const meta = getOrderMeta(order.id);
+
+              return (
+                <div key={order.id} className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
+                  <div className="flex justify-between gap-4">
+                    <div>
+                      <p className="font-black">{order.client?.name || 'Cliente não informado'}</p>
+                      <p className="text-sm text-zinc-400">Entrega: {formatDate(meta.deliveryDate || order.deliveryDate)}</p>
+                      <p className="text-sm text-zinc-500 mt-1">{order.client?.address || '-'}</p>
+                    </div>
+                    <AlertTriangle size={24} className="text-red-400 shrink-0" />
+                  </div>
+                </div>
+              );
+            })}
+
+            {lateOrdersList.length === 0 && (
+              <p className="text-zinc-500">Nenhum pedido atrasado.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
+          <h2 className="text-2xl font-black mb-6 text-red-400">
+            Retiradas atrasadas
+          </h2>
+
+          <div className="space-y-4">
+            {lateWithdrawalsList.map((item) => (
+              <div key={item.id} className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
+                <div className="flex justify-between gap-4">
+                  <div>
+                    <p className="font-black">{item.client || 'Cliente não informado'}</p>
+                    <p className="text-sm text-zinc-400">Buscar: {formatDate(item.pickupDate)}</p>
+                    <p className="text-sm text-zinc-500 mt-1">{item.item || '-'}</p>
+                  </div>
+                  <AlertTriangle size={24} className="text-red-400 shrink-0" />
+                </div>
+              </div>
+            ))}
+
+            {lateWithdrawalsList.length === 0 && (
+              <p className="text-zinc-500">Nenhuma retirada atrasada.</p>
             )}
           </div>
         </div>
