@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rjchopp-sge-v3';
+const CACHE_NAME = 'rjchopp-sge-v4';
 
 const APP_SHELL = [
   '/',
@@ -35,7 +35,17 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  if (url.pathname.startsWith('/api') || url.port === '3333') {
+  if (request.method !== 'GET') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  const isBackendRequest =
+    url.hostname.includes('railway.app') ||
+    url.hostname === 'localhost' ||
+    url.port === '3333';
+
+  if (isBackendRequest) {
     event.respondWith(fetch(request));
     return;
   }
@@ -49,18 +59,23 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(request).then((cached) => {
-      return (
-        cached ||
-        fetch(request).then((response) => {
-          const copy = response.clone();
+      if (cached) {
+        return cached;
+      }
 
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, copy);
-          });
-
+      return fetch(request).then((response) => {
+        if (!response || response.status !== 200 || response.type === 'opaque') {
           return response;
-        })
-      );
+        }
+
+        const copy = response.clone();
+
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, copy);
+        });
+
+        return response;
+      });
     })
   );
 });

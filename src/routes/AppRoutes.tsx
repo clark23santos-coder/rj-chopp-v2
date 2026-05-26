@@ -36,80 +36,21 @@ export default function AppRoutes() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
-        <Route
-          path="/"
-          element={protect(<DashboardPage />, ['ADMIN', 'SALES', 'FINANCE'])}
-        />
-
-        <Route
-          path="/produtos"
-          element={protect(<ProductsPage />, ['ADMIN', 'SALES'])}
-        />
-
-        <Route
-          path="/estoque"
-          element={protect(<StockMovementsPage />, ['ADMIN', 'SALES'])}
-        />
-
-        <Route
-          path="/pedidos"
-          element={protect(<OrdersPage />, ['ADMIN', 'SALES', 'DELIVERY'])}
-        />
-
-        <Route
-          path="/clientes"
-          element={protect(<ClientsPage />, ['ADMIN', 'SALES'])}
-        />
-
-        <Route
-          path="/mapa"
-          element={protect(<MapPage />, ['ADMIN', 'SALES', 'DELIVERY'])}
-        />
-
-        <Route
-          path="/financeiro"
-          element={protect(<FinancialPage />, ['ADMIN', 'FINANCE'])}
-        />
-
-        <Route
-          path="/despesas"
-          element={protect(<ExpensesPage />, ['ADMIN', 'FINANCE'])}
-        />
-
-        <Route
-          path="/receber"
-          element={protect(<ReceivablesPage />, ['ADMIN', 'SALES', 'FINANCE'])}
-        />
-
-        <Route
-          path="/retiradas"
-          element={protect(<WithdrawalsPage />, ['ADMIN', 'SALES', 'DELIVERY'])}
-        />
-
-        <Route
-          path="/agenda-retirada"
-          element={protect(<ReturnsPage />, ['ADMIN'])}
-        />
-
-        <Route
-          path="/relatorios"
-          element={protect(<ReportsPage />, ['ADMIN', 'FINANCE'])}
-        />
-
-        <Route
-          path="/historico"
-          element={protect(<AuditPage />, ['ADMIN'])}
-        />
-
-        <Route
-          path="/configuracoes"
-          element={protect(<SettingsPage />, ['ADMIN'])}
-        />
-
-        <Route
-          path="/backup"
-          element={protect(<BackupPage />, ['ADMIN'])}
-        />
+        <Route path="/" element={protect(<DashboardPage />, ['ADMIN', 'SALES', 'FINANCE'])} />
+        <Route path="/produtos" element={protect(<ProductsPage />, ['ADMIN', 'SALES'])} />
+        <Route path="/estoque" element={protect(<StockMovementsPage />, ['ADMIN', 'SALES'])} />
+        <Route path="/pedidos" element={protect(<OrdersPage />, ['ADMIN', 'SALES', 'DELIVERY'])} />
+        <Route path="/clientes" element={protect(<ClientsPage />, ['ADMIN', 'SALES'])} />
+        <Route path="/mapa" element={protect(<MapPage />, ['ADMIN', 'SALES', 'DELIVERY'])} />
+        <Route path="/financeiro" element={protect(<FinancialPage />, ['ADMIN', 'FINANCE'])} />
+        <Route path="/despesas" element={protect(<ExpensesPage />, ['ADMIN', 'FINANCE'])} />
+        <Route path="/receber" element={protect(<ReceivablesPage />, ['ADMIN', 'SALES', 'FINANCE'])} />
+        <Route path="/retiradas" element={protect(<WithdrawalsPage />, ['ADMIN', 'SALES', 'DELIVERY'])} />
+        <Route path="/agenda-retirada" element={protect(<ReturnsPage />, ['ADMIN'])} />
+        <Route path="/relatorios" element={protect(<ReportsPage />, ['ADMIN', 'FINANCE'])} />
+        <Route path="/historico" element={protect(<AuditPage />, ['ADMIN'])} />
+        <Route path="/configuracoes" element={protect(<SettingsPage />, ['ADMIN'])} />
+        <Route path="/backup" element={protect(<BackupPage />, ['ADMIN'])} />
       </Routes>
     </BrowserRouter>
   );

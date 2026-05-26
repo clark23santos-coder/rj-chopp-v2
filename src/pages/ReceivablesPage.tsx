@@ -6,6 +6,16 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { api } from '../services/api';
 import { addAuditLog } from '../services/audit';
+import {
+  CACHE_ORDERS_KEY,
+  OFFLINE_ORDERS_KEY,
+  addOfflineAction,
+  cacheItems,
+  getCachedItems,
+  isOnline,
+  mergeOfflineWithOnline,
+  saveOfflineItem,
+} from '../services/offline';
 
 function formatMoney(value: any) {
   return new Intl.NumberFormat('pt-BR', {
@@ -42,10 +52,12 @@ export default function ReceivablesPage() {
   async function loadOrders() {
     try {
       const response = await api.get('/orders', authHeaders());
-      setOrders(Array.isArray(response.data) ? response.data : []);
+      const onlineOrders = Array.isArray(response.data) ? response.data : [];
+      cacheItems(CACHE_ORDERS_KEY, onlineOrders);
+      setOrders(mergeOfflineWithOnline(OFFLINE_ORDERS_KEY, onlineOrders));
     } catch (error) {
       console.log('Erro ao carregar contas a receber:', error);
-      setOrders([]);
+      setOrders(mergeOfflineWithOnline(OFFLINE_ORDERS_KEY, getCachedItems(CACHE_ORDERS_KEY)));
     }
   }
 
@@ -65,14 +77,26 @@ export default function ReceivablesPage() {
     try {
       setLoading(true);
 
+      const data = {
+        status: 'FINISHED',
+        paymentMethod: 'PAGO',
+        total: Number(order.total || 0),
+        note: order.note || '',
+      };
+
+      if (!isOnline()) {
+        const offlineOrder = { ...order, ...data, offlinePending: true, offlineAction: 'RECEIVE_PAYMENT' };
+        saveOfflineItem(OFFLINE_ORDERS_KEY, offlineOrder);
+        addOfflineAction({ type: 'RECEIVE_PAYMENT', title: `Receber fiado offline: ${order.client?.name || 'Cliente não informado'}`, payload: { id: order.id, data, config: authHeaders() } });
+        setOrders((current) => current.map((item) => item.id === order.id ? offlineOrder : item));
+        addAuditLog({ area: 'Financeiro', action: 'FINISHED', title: `Fiado recebido offline: ${order.client?.name || 'Cliente não informado'}`, description: `Valor: ${formatMoney(order.total)}. Será sincronizado quando a internet voltar.` });
+        alert('Pagamento marcado offline. Quando a internet voltar, o sistema vai sincronizar.');
+        return;
+      }
+
       await api.put(
         `/orders/${order.id}`,
-        {
-          status: 'FINISHED',
-          paymentMethod: 'PAGO',
-          total: Number(order.total || 0),
-          note: order.note || '',
-        },
+        data,
         authHeaders()
       );
 
@@ -186,6 +210,9 @@ export default function ReceivablesPage() {
               >
                 <td className="p-5 font-bold">
                   {order.client?.name || 'Cliente não informado'}
+                  {order.offlinePending && (
+                    <p className="text-xs text-yellow-400 font-black mt-1">Pendente de sincronizar</p>
+                  )}
                 </td>
 
                 <td className="p-5 text-zinc-400">

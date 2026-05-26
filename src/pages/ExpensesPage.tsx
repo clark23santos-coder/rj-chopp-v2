@@ -6,6 +6,17 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { api } from '../services/api';
 import { addAuditLog } from '../services/audit';
+import {
+  CACHE_FINANCIAL_KEY,
+  OFFLINE_FINANCIAL_KEY,
+  addOfflineAction,
+  cacheItems,
+  getCachedItems,
+  isOnline,
+  markOfflineDeleted,
+  mergeOfflineWithOnline,
+  saveOfflineItem,
+} from '../services/offline';
 
 const inputClass =
   'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
