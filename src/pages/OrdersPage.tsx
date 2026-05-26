@@ -909,7 +909,7 @@ export default function OrdersPage() {
         getOrderMeta(deliveryOrder.id)
       );
 
-      await updateOrderStatus(deliveryOrder, 'entregue', {
+      await updateOrderStatus(deliveryOrder, 'APPROVED', {
         pickupDate,
         returnItems,
         observation,
@@ -991,7 +991,7 @@ export default function OrdersPage() {
     try {
       setLoading(true);
 
-      await updateOrderStatus(order, 'finalizado');
+      await updateOrderStatus(order, 'FINISHED');
 
       await loadData();
 
@@ -1023,7 +1023,7 @@ export default function OrdersPage() {
     try {
       setLoading(true);
 
-      await updateOrderStatus(order, 'cancelado');
+      await updateOrderStatus(order, 'CANCELLED');
 
       await loadData();
 
