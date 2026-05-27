@@ -1,4 +1,5 @@
-const CACHE_NAME = 'rjchopp-sge-v4';
+const CACHE_NAME = 'rjchopp-sge-v6';
+const API_CACHE_NAME = 'rjchopp-sge-api-v1';
 
 const APP_SHELL = [
   '/',
@@ -8,6 +9,32 @@ const APP_SHELL = [
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
 ];
+
+function isBackendRequest(url) {
+  return (
+    url.hostname.includes('railway.app') ||
+    url.hostname.includes('rlwy.net') ||
+    url.hostname === 'localhost' ||
+    url.port === '3333'
+  );
+}
+
+function isApiGetRequest(request, url) {
+  if (request.method !== 'GET') {
+    return false;
+  }
+
+  if (!isBackendRequest(url)) {
+    return false;
+  }
+
+  return (
+    url.pathname.includes('/orders') ||
+    url.pathname.includes('/clients') ||
+    url.pathname.includes('/products') ||
+    url.pathname.includes('/financial-transactions')
+  );
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -22,7 +49,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME)
+          .filter((key) => key !== CACHE_NAME && key !== API_CACHE_NAME)
           .map((key) => caches.delete(key))
       );
     })
@@ -35,17 +62,45 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  if (request.method !== 'GET') {
+  if (isApiGetRequest(request, url)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+
+            caches.open(API_CACHE_NAME).then((cache) => {
+              cache.put(request, copy);
+            });
+          }
+
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+
+          if (cached) {
+            return cached;
+          }
+
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+        })
+    );
+
+    return;
+  }
+
+  if (isBackendRequest(url)) {
     event.respondWith(fetch(request));
     return;
   }
 
-  const isBackendRequest =
-    url.hostname.includes('railway.app') ||
-    url.hostname === 'localhost' ||
-    url.port === '3333';
-
-  if (isBackendRequest) {
+  if (request.method !== 'GET') {
     event.respondWith(fetch(request));
     return;
   }
