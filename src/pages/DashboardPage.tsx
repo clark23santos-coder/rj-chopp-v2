@@ -11,7 +11,20 @@ import {
   Cell,
 } from 'recharts';
 
-import { AlertTriangle, CalendarDays } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarDays,
+  Package,
+  Users,
+  ClipboardList,
+  Boxes,
+  Truck,
+  Wallet,
+  Receipt,
+  TrendingUp,
+  HandCoins,
+  ArrowRight,
+} from 'lucide-react';
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
@@ -70,13 +83,8 @@ function isLateOrder(order: any) {
   const meta = getOrderMeta(order.id);
   const deliveryDate = String(meta.deliveryDate || order.deliveryDate || '');
 
-  if (!deliveryDate) {
-    return false;
-  }
-
-  if (status !== 'PENDING') {
-    return false;
-  }
+  if (!deliveryDate) return false;
+  if (status !== 'PENDING') return false;
 
   return deliveryDate < getToday();
 }
@@ -86,13 +94,8 @@ function isTodayOrder(order: any) {
   const meta = getOrderMeta(order.id);
   const deliveryDate = String(meta.deliveryDate || order.deliveryDate || '');
 
-  if (!deliveryDate) {
-    return false;
-  }
-
-  if (status !== 'PENDING') {
-    return false;
-  }
+  if (!deliveryDate) return false;
+  if (status !== 'PENDING') return false;
 
   return deliveryDate === getToday();
 }
@@ -113,28 +116,153 @@ function formatCompactMoney(value: number) {
   return `${sign}${formatMoney(abs)}`;
 }
 
-function DashboardCard({ title, value, money = false, fullValue }: any) {
+function DashboardCard({
+  title,
+  value,
+  money = false,
+  fullValue,
+  icon: Icon,
+  tone = 'yellow',
+}: any) {
+  const toneClass =
+    tone === 'red'
+      ? 'from-red-500/20 to-red-500/5 text-red-400 border-red-500/25'
+      : tone === 'green'
+        ? 'from-green-500/20 to-green-500/5 text-green-400 border-green-500/25'
+        : 'from-yellow-500/20 to-yellow-500/5 text-yellow-400 border-yellow-500/25';
+
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 min-h-[130px] flex flex-col justify-between overflow-hidden">
-      <p className="text-zinc-300 font-bold text-sm md:text-base">
-        {title}
-      </p>
+    <div className="group relative min-h-[145px] overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/52 p-5 shadow-[0_0_35px_rgba(245,158,11,.08)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-yellow-400/35 hover:shadow-[0_0_50px_rgba(245,158,11,.18)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(250,204,21,.14),transparent_36%),linear-gradient(135deg,rgba(255,255,255,.06),transparent_38%,rgba(250,204,21,.04))]" />
 
-      <div>
-        <p
-          className={`font-black text-white leading-none ${
-            money ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'
-          }`}
-        >
-          {value}
-        </p>
-
-        {money && fullValue && (
-          <p className="text-xs text-zinc-500 mt-3 truncate">
-            {fullValue}
+      <div className="relative flex h-full flex-col justify-between">
+        <div className="flex items-start justify-between gap-4">
+          <p className="max-w-[75%] text-sm font-black text-zinc-300 md:text-base">
+            {title}
           </p>
+
+          {Icon && (
+            <div className={`rounded-2xl border bg-gradient-to-br p-3 ${toneClass}`}>
+              <Icon size={22} />
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p
+            className={`font-black leading-none text-white ${
+              money ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'
+            }`}
+          >
+            {value}
+          </p>
+
+          {money && fullValue && (
+            <p className="mt-3 truncate text-xs font-medium text-zinc-500">
+              {fullValue}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PremiumPanel({ title, children, icon: Icon, tone = 'yellow' }: any) {
+  const titleColor = tone === 'red' ? 'text-red-400' : 'text-yellow-400';
+
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/50 p-6 shadow-[0_0_38px_rgba(245,158,11,.08)] backdrop-blur-xl">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,.11),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.055),transparent_38%,rgba(250,204,21,.035))]" />
+      <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+
+      <div className="relative">
+        <div className="mb-6 flex items-center gap-3">
+          {Icon && (
+            <div className="rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-yellow-400">
+              <Icon size={24} />
+            </div>
+          )}
+
+          <h2 className={`text-2xl font-black ${titleColor}`}>
+            {title}
+          </h2>
+        </div>
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function AlertBox({ type, title, description, href, buttonText }: any) {
+  const isRed = type === 'red';
+
+  return (
+    <div
+      className={`relative mb-8 overflow-hidden rounded-[2rem] border p-6 backdrop-blur-xl ${
+        isRed
+          ? 'border-red-500/35 bg-red-500/12'
+          : 'border-yellow-400/35 bg-yellow-400/12'
+      }`}
+    >
+      <div
+        className={`absolute inset-0 ${
+          isRed
+            ? 'bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,.18),transparent_35%)]'
+            : 'bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,.18),transparent_35%)]'
+        }`}
+      />
+
+      <div className="relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-4">
+          <div
+            className={`rounded-2xl p-4 text-white ${
+              isRed ? 'bg-red-500' : 'bg-yellow-400 text-black'
+            }`}
+          >
+            {isRed ? <AlertTriangle size={32} /> : <CalendarDays size={32} />}
+          </div>
+
+          <div>
+            <h2 className={`text-2xl font-black ${isRed ? 'text-red-400' : 'text-yellow-400'}`}>
+              {title}
+            </h2>
+
+            <p className="mt-1 font-bold text-zinc-300">
+              {description}
+            </p>
+          </div>
+        </div>
+
+        {href && (
+          <a
+            href={href}
+            className={`inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-center font-black transition hover:scale-[1.02] ${
+              isRed
+                ? 'bg-red-500 text-white'
+                : 'bg-yellow-400 text-black'
+            }`}
+          >
+            {buttonText}
+            <ArrowRight size={20} />
+          </a>
         )}
       </div>
+    </div>
+  );
+}
+
+function ListItem({ children, danger = false }: any) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 transition hover:-translate-y-0.5 ${
+        danger
+          ? 'border-red-500/25 bg-red-500/10'
+          : 'border-yellow-500/10 bg-black/45 hover:border-yellow-400/25'
+      }`}
+    >
+      {children}
     </div>
   );
 }
@@ -278,101 +406,64 @@ export default function DashboardPage() {
     <Layout>
       <PageHeader
         title="Dashboard"
-        description="Visão real da RJ Chopp"
+        description="Visão geral da operação, estoque, pedidos, retiradas e financeiro da RJ Chopp."
       />
 
       {loading && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 mb-8">
-          <p className="text-zinc-400 font-bold">
+        <div className="mb-8 rounded-[2rem] border border-yellow-500/15 bg-black/45 p-6 backdrop-blur-xl">
+          <p className="font-bold text-zinc-400">
             Carregando informações...
           </p>
         </div>
       )}
 
       {totals.lateOrders > 0 && (
-        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-6 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-            <div className="flex items-start gap-4">
-              <div className="bg-red-500 text-white rounded-2xl p-4">
-                <AlertTriangle size={32} />
-              </div>
-
-              <div>
-                <h2 className="text-2xl font-black text-red-400">
-                  Atenção: {totals.lateOrders} pedido(s) atrasado(s)
-                </h2>
-
-                <p className="text-zinc-300 font-bold mt-1">
-                  Existem pedidos pendentes com data de entrega vencida.
-                </p>
-              </div>
-            </div>
-
-            <a
-              href="/pedidos"
-              className="bg-red-500 text-white rounded-2xl px-6 py-3 font-black text-center"
-            >
-              Ver pedidos
-            </a>
-          </div>
-        </div>
+        <AlertBox
+          type="red"
+          title={`Atenção: ${totals.lateOrders} pedido(s) atrasado(s)`}
+          description="Existem pedidos pendentes com data de entrega vencida."
+          href="/pedidos"
+          buttonText="Ver pedidos"
+        />
       )}
 
       {totals.lateWithdrawals > 0 && (
-        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-6 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-            <div className="flex items-start gap-4">
-              <div className="bg-red-500 text-white rounded-2xl p-4">
-                <AlertTriangle size={32} />
-              </div>
-
-              <div>
-                <h2 className="text-2xl font-black text-red-400">
-                  Atenção: {totals.lateWithdrawals} retirada(s) atrasada(s)
-                </h2>
-
-                <p className="text-zinc-300 font-bold mt-1">
-                  Existem itens que já deveriam ter sido buscados. Confira Retiradas ou Mapa.
-                </p>
-              </div>
-            </div>
-
-            <a
-              href="/retiradas"
-              className="bg-red-500 text-white rounded-2xl px-6 py-3 font-black text-center"
-            >
-              Ver retiradas
-            </a>
-          </div>
-        </div>
+        <AlertBox
+          type="red"
+          title={`Atenção: ${totals.lateWithdrawals} retirada(s) atrasada(s)`}
+          description="Existem itens que já deveriam ter sido buscados. Confira Retiradas ou Mapa."
+          href="/retiradas"
+          buttonText="Ver retiradas"
+        />
       )}
 
       {totals.todayWithdrawals > 0 && (
-        <div className="bg-yellow-400/20 border border-yellow-400/40 rounded-3xl p-5 mb-8">
-          <div className="flex items-center gap-3">
-            <CalendarDays size={24} className="text-yellow-400" />
-            <p className="font-black text-yellow-400">
-              Hoje tem {totals.todayWithdrawals} retirada(s) para buscar.
-            </p>
-          </div>
-        </div>
+        <AlertBox
+          type="yellow"
+          title={`Hoje tem ${totals.todayWithdrawals} retirada(s) para buscar`}
+          description="Confira a agenda de retiradas para não deixar nenhum item para trás."
+          href="/retiradas"
+          buttonText="Abrir retiradas"
+        />
       )}
 
-      <div className="grid md:grid-cols-6 gap-6 mb-8">
-        <DashboardCard title="Produtos" value={products.length} />
-        <DashboardCard title="Clientes" value={clients.length} />
-        <DashboardCard title="Pedidos" value={orders.length} />
-        <DashboardCard title="Estoque baixo" value={totals.lowStock} />
-        <DashboardCard title="Pedidos atrasados" value={totals.lateOrders} />
-        <DashboardCard title="Retiradas atrasadas" value={totals.lateWithdrawals} />
+      <div className="mb-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-6">
+        <DashboardCard title="Produtos" value={products.length} icon={Package} />
+        <DashboardCard title="Clientes" value={clients.length} icon={Users} />
+        <DashboardCard title="Pedidos" value={orders.length} icon={ClipboardList} />
+        <DashboardCard title="Estoque baixo" value={totals.lowStock} icon={Boxes} tone={totals.lowStock > 0 ? 'red' : 'yellow'} />
+        <DashboardCard title="Pedidos atrasados" value={totals.lateOrders} icon={AlertTriangle} tone={totals.lateOrders > 0 ? 'red' : 'yellow'} />
+        <DashboardCard title="Retiradas atrasadas" value={totals.lateWithdrawals} icon={Truck} tone={totals.lateWithdrawals > 0 ? 'red' : 'yellow'} />
       </div>
 
-      <div className="grid md:grid-cols-4 gap-6 mb-8">
+      <div className="mb-8 grid gap-6 md:grid-cols-4">
         <DashboardCard
           title="Receita"
           value={formatCompactMoney(totals.revenue)}
           fullValue={formatMoney(totals.revenue)}
           money
+          icon={Wallet}
+          tone="green"
         />
 
         <DashboardCard
@@ -380,6 +471,8 @@ export default function DashboardPage() {
           value={formatCompactMoney(totals.expenses)}
           fullValue={formatMoney(totals.expenses)}
           money
+          icon={Receipt}
+          tone="red"
         />
 
         <DashboardCard
@@ -387,6 +480,8 @@ export default function DashboardPage() {
           value={formatCompactMoney(totals.profit)}
           fullValue={formatMoney(totals.profit)}
           money
+          icon={TrendingUp}
+          tone={totals.profit >= 0 ? 'green' : 'red'}
         />
 
         <DashboardCard
@@ -394,40 +489,35 @@ export default function DashboardPage() {
           value={formatCompactMoney(totals.receivable)}
           fullValue={formatMoney(totals.receivable)}
           money
+          icon={HandCoins}
+          tone="yellow"
         />
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
-          <h2 className="text-2xl font-black mb-6 text-yellow-400">
-            Financeiro
-          </h2>
-
+      <div className="mb-8 grid gap-6 xl:grid-cols-2">
+        <PremiumPanel title="Financeiro" icon={Wallet}>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={financialChart}>
-                <XAxis dataKey="name" stroke="#a1a1aa" />
-                <YAxis stroke="#a1a1aa" />
+                <XAxis dataKey="name" stroke="#d4d4d8" />
+                <YAxis stroke="#d4d4d8" />
                 <Tooltip
                   formatter={(value: any) => formatMoney(Number(value))}
                   contentStyle={{
-                    background: '#18181b',
-                    border: '1px solid #3f3f46',
-                    borderRadius: '12px',
+                    background: '#050505',
+                    border: '1px solid rgba(250, 204, 21, .25)',
+                    borderRadius: '16px',
                     color: '#fff',
+                    boxShadow: '0 0 35px rgba(245, 158, 11, .14)',
                   }}
                 />
-                <Bar dataKey="valor" fill="#facc15" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="valor" fill="#facc15" radius={[12, 12, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </PremiumPanel>
 
-        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
-          <h2 className="text-2xl font-black mb-6 text-yellow-400">
-            Operação
-          </h2>
-
+        <PremiumPanel title="Operação" icon={ClipboardList}>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -435,7 +525,7 @@ export default function DashboardPage() {
                   data={orderStatusChart}
                   dataKey="value"
                   nameKey="name"
-                  outerRadius={110}
+                  outerRadius={112}
                   label
                 >
                   {orderStatusChart.map((_, index) => (
@@ -447,45 +537,40 @@ export default function DashboardPage() {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    background: '#18181b',
-                    border: '1px solid #3f3f46',
-                    borderRadius: '12px',
+                    background: '#050505',
+                    border: '1px solid rgba(250, 204, 21, .25)',
+                    borderRadius: '16px',
                     color: '#fff',
+                    boxShadow: '0 0 35px rgba(245, 158, 11, .14)',
                   }}
                 />
               </PieChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </PremiumPanel>
       </div>
 
-      <div className="grid lg:grid-cols-4 gap-6">
-        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
-          <h2 className="text-2xl font-black mb-6 text-yellow-400">
-            Últimos pedidos
-          </h2>
-
+      <div className="grid gap-6 xl:grid-cols-4">
+        <PremiumPanel title="Últimos pedidos" icon={ClipboardList}>
           <div className="space-y-4">
             {recentOrders.map((order) => (
-              <div
-                key={order.id}
-                className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4"
-              >
+              <ListItem key={order.id}>
                 <div className="flex justify-between gap-4">
                   <div>
-                    <p className="font-black">
+                    <p className="font-black text-white">
                       {order.client?.name || 'Cliente não informado'}
                     </p>
+
                     <p className="text-sm text-zinc-400">
                       Status: {order.status || 'Pendente'}
                     </p>
                   </div>
 
-                  <p className="font-black text-yellow-400 text-lg">
+                  <p className="text-lg font-black text-yellow-400">
                     {formatMoney(Number(order.total || 0))}
                   </p>
                 </div>
-              </div>
+              </ListItem>
             ))}
 
             {recentOrders.length === 0 && (
@@ -494,88 +579,96 @@ export default function DashboardPage() {
               </p>
             )}
           </div>
-        </div>
+        </PremiumPanel>
 
-        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
-          <h2 className="text-2xl font-black mb-6 text-red-400">
-            Pedidos atrasados
-          </h2>
-
+        <PremiumPanel title="Pedidos atrasados" icon={AlertTriangle} tone="red">
           <div className="space-y-4">
             {lateOrdersList.map((order) => {
               const meta = getOrderMeta(order.id);
 
               return (
-                <div key={order.id} className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
+                <ListItem key={order.id} danger>
                   <div className="flex justify-between gap-4">
                     <div>
-                      <p className="font-black">{order.client?.name || 'Cliente não informado'}</p>
-                      <p className="text-sm text-zinc-400">Entrega: {formatDate(meta.deliveryDate || order.deliveryDate)}</p>
-                      <p className="text-sm text-zinc-500 mt-1">{order.client?.address || '-'}</p>
+                      <p className="font-black text-white">
+                        {order.client?.name || 'Cliente não informado'}
+                      </p>
+
+                      <p className="text-sm text-zinc-400">
+                        Entrega: {formatDate(meta.deliveryDate || order.deliveryDate)}
+                      </p>
+
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {order.client?.address || '-'}
+                      </p>
                     </div>
-                    <AlertTriangle size={24} className="text-red-400 shrink-0" />
+
+                    <AlertTriangle size={24} className="shrink-0 text-red-400" />
                   </div>
-                </div>
+                </ListItem>
               );
             })}
 
             {lateOrdersList.length === 0 && (
-              <p className="text-zinc-500">Nenhum pedido atrasado.</p>
+              <p className="text-zinc-500">
+                Nenhum pedido atrasado.
+              </p>
             )}
           </div>
-        </div>
+        </PremiumPanel>
 
-        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
-          <h2 className="text-2xl font-black mb-6 text-red-400">
-            Retiradas atrasadas
-          </h2>
-
+        <PremiumPanel title="Retiradas atrasadas" icon={Truck} tone="red">
           <div className="space-y-4">
             {lateWithdrawalsList.map((item) => (
-              <div key={item.id} className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
+              <ListItem key={item.id} danger>
                 <div className="flex justify-between gap-4">
                   <div>
-                    <p className="font-black">{item.client || 'Cliente não informado'}</p>
-                    <p className="text-sm text-zinc-400">Buscar: {formatDate(item.pickupDate)}</p>
-                    <p className="text-sm text-zinc-500 mt-1">{item.item || '-'}</p>
+                    <p className="font-black text-white">
+                      {item.client || 'Cliente não informado'}
+                    </p>
+
+                    <p className="text-sm text-zinc-400">
+                      Buscar: {formatDate(item.pickupDate)}
+                    </p>
+
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {item.item || '-'}
+                    </p>
                   </div>
-                  <AlertTriangle size={24} className="text-red-400 shrink-0" />
+
+                  <AlertTriangle size={24} className="shrink-0 text-red-400" />
                 </div>
-              </div>
+              </ListItem>
             ))}
 
             {lateWithdrawalsList.length === 0 && (
-              <p className="text-zinc-500">Nenhuma retirada atrasada.</p>
+              <p className="text-zinc-500">
+                Nenhuma retirada atrasada.
+              </p>
             )}
           </div>
-        </div>
+        </PremiumPanel>
 
-        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 p-6">
-          <h2 className="text-2xl font-black mb-6 text-yellow-400">
-            Produtos com estoque baixo
-          </h2>
-
+        <PremiumPanel title="Estoque baixo" icon={Boxes}>
           <div className="space-y-4">
             {lowStockProducts.map((product) => (
-              <div
-                key={product.id}
-                className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4"
-              >
+              <ListItem key={product.id}>
                 <div className="flex justify-between gap-4">
                   <div>
-                    <p className="font-black">
+                    <p className="font-black text-white">
                       {product.name}
                     </p>
+
                     <p className="text-sm text-zinc-400">
                       Mínimo: {product.minimumStock} {product.unit}
                     </p>
                   </div>
 
-                  <p className="font-black text-red-400 text-lg">
+                  <p className="text-lg font-black text-red-400">
                     {product.stock} {product.unit}
                   </p>
                 </div>
-              </div>
+              </ListItem>
             ))}
 
             {lowStockProducts.length === 0 && (
@@ -584,7 +677,7 @@ export default function DashboardPage() {
               </p>
             )}
           </div>
-        </div>
+        </PremiumPanel>
       </div>
     </Layout>
   );
