@@ -8,6 +8,21 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
+import {
+  Printer,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCcw,
+  Wallet,
+  Receipt,
+  TrendingUp,
+  HandCoins,
+  ClipboardList,
+  Users,
+  Package,
+  AlertTriangle,
+} from 'lucide-react';
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
@@ -24,6 +39,9 @@ const defaultCompanySettings = {
   noteMessage: 'Obrigado pela preferência.',
   reportFooter: 'Relatório gerado pelo sistema RJ Chopp SGE',
 };
+
+const inputClass =
+  'w-full bg-black/55 border border-yellow-500/20 rounded-2xl px-4 py-3 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-black/70 focus:shadow-[0_0_28px_rgba(250,204,21,.14)]';
 
 function readStorage(key: string, fallback: any) {
   try {
@@ -140,27 +158,79 @@ function changeMonth(monthKey: string, direction: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function ReportCard({ title, value, fullValue, money = false }: any) {
+function ReportCard({ title, value, fullValue, money = false, icon: Icon, tone = 'yellow' }: any) {
+  const toneClass =
+    tone === 'red'
+      ? 'from-red-500/20 to-red-500/5 text-red-400 border-red-500/25'
+      : tone === 'green'
+        ? 'from-green-500/20 to-green-500/5 text-green-400 border-green-500/25'
+        : 'from-yellow-500/20 to-yellow-500/5 text-yellow-400 border-yellow-500/25';
+
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 min-h-[130px] flex flex-col justify-between overflow-hidden">
-      <p className="text-zinc-300 font-bold text-sm md:text-base">
-        {title}
-      </p>
+    <div className="group relative min-h-[145px] overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/52 p-5 shadow-[0_0_35px_rgba(245,158,11,.08)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-yellow-400/35 hover:shadow-[0_0_50px_rgba(245,158,11,.18)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(250,204,21,.14),transparent_36%),linear-gradient(135deg,rgba(255,255,255,.06),transparent_38%,rgba(250,204,21,.04))]" />
 
-      <div>
-        <p
-          className={`font-black text-white leading-none ${
-            money ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'
-          }`}
-        >
-          {value}
-        </p>
-
-        {money && fullValue && (
-          <p className="text-xs text-zinc-500 mt-3 truncate">
-            {fullValue}
+      <div className="relative flex h-full flex-col justify-between">
+        <div className="flex items-start justify-between gap-4">
+          <p className="max-w-[75%] text-sm font-black text-zinc-300 md:text-base">
+            {title}
           </p>
-        )}
+
+          {Icon && (
+            <div className={`rounded-2xl border bg-gradient-to-br p-3 ${toneClass}`}>
+              <Icon size={22} />
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p
+            className={`font-black leading-none text-white ${
+              money ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'
+            }`}
+          >
+            {value}
+          </p>
+
+          {money && fullValue && (
+            <p className="mt-3 truncate text-xs font-medium text-zinc-500">
+              {fullValue}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PremiumPanel({ title, description, icon: Icon, children }: any) {
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/50 p-6 shadow-[0_0_38px_rgba(245,158,11,.08)] backdrop-blur-xl">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,.10),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.05),transparent_38%,rgba(250,204,21,.035))]" />
+      <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+
+      <div className="relative">
+        <div className="mb-6 flex items-start gap-3">
+          {Icon && (
+            <div className="rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-yellow-400">
+              <Icon size={24} />
+            </div>
+          )}
+
+          <div>
+            <h2 className="text-2xl font-black text-yellow-400">
+              {title}
+            </h2>
+
+            {description && (
+              <p className="mt-1 text-sm font-medium text-zinc-500">
+                {description}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {children}
       </div>
     </div>
   );
@@ -615,28 +685,32 @@ export default function ReportsPage() {
       <div className="no-print">
         <PageHeader
           title="Relatórios"
-          description="Relatórios financeiros e operacionais"
+          description="Relatórios financeiros, operacionais, produtos vendidos, estoque e impressão em PDF."
         />
 
         {loading && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 mb-8">
-            <p className="text-zinc-400 font-bold">
+          <div className="mb-8 rounded-[2rem] border border-yellow-500/15 bg-black/45 p-6 backdrop-blur-xl">
+            <p className="font-bold text-zinc-400">
               Carregando relatórios...
             </p>
           </div>
         )}
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-8">
-          <div className="grid md:grid-cols-[1fr_auto_auto_auto] gap-4 items-end">
+        <PremiumPanel
+          title="Filtro do relatório"
+          description="Escolha o mês desejado ou veja todos os meses."
+          icon={CalendarDays}
+        >
+          <div className="grid items-end gap-4 md:grid-cols-[1fr_auto_auto_auto_auto]">
             <div>
-              <label className="block mb-2 text-sm font-bold text-zinc-300">
+              <label className="mb-2 block text-sm font-black text-yellow-200">
                 Mês do relatório
               </label>
 
               <select
                 value={selectedMonth}
                 onChange={(event) => setSelectedMonth(event.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400"
+                className={inputClass}
               >
                 <option value="">Todos os meses</option>
 
@@ -650,46 +724,53 @@ export default function ReportsPage() {
 
             <button
               onClick={() => setSelectedMonth(changeMonth(selectedMonth || getCurrentMonthKey(), -1))}
-              className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
             >
+              <ChevronLeft size={18} />
               Mês anterior
             </button>
 
             <button
               onClick={() => setSelectedMonth(getCurrentMonthKey())}
-              className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
             >
+              <RefreshCcw size={18} />
               Mês atual
             </button>
 
             <button
               onClick={() => setSelectedMonth(changeMonth(selectedMonth || getCurrentMonthKey(), 1))}
-              className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
             >
               Próximo mês
+              <ChevronRight size={18} />
+            </button>
+
+            <button
+              onClick={printReport}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 px-6 py-3 font-black text-black shadow-[0_0_30px_rgba(250,204,21,.22)] transition hover:scale-[1.01] hover:shadow-[0_0_45px_rgba(250,204,21,.35)]"
+            >
+              <Printer size={18} />
+              Imprimir / PDF
             </button>
           </div>
 
-          <p className="text-zinc-500 mt-4">
-            Mostrando relatório de: <strong className="text-yellow-400">{getMonthName(selectedMonth)}</strong>
+          <p className="mt-4 text-zinc-500">
+            Mostrando relatório de:{' '}
+            <strong className="text-yellow-400">
+              {getMonthName(selectedMonth)}
+            </strong>
           </p>
-        </div>
+        </PremiumPanel>
 
-        <div className="flex justify-end mb-8">
-          <button
-            onClick={printReport}
-            className="bg-yellow-400 text-black rounded-2xl px-6 py-3 font-black"
-          >
-            Imprimir / Salvar PDF
-          </button>
-        </div>
-
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="mb-8 mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           <ReportCard
             title="Receita"
             value={formatCompactMoney(totals.revenue)}
             fullValue={formatMoney(totals.revenue)}
             money
+            icon={Wallet}
+            tone="green"
           />
 
           <ReportCard
@@ -697,6 +778,8 @@ export default function ReportsPage() {
             value={formatCompactMoney(totals.expenses)}
             fullValue={formatMoney(totals.expenses)}
             money
+            icon={Receipt}
+            tone="red"
           />
 
           <ReportCard
@@ -704,6 +787,8 @@ export default function ReportsPage() {
             value={formatCompactMoney(totals.profit)}
             fullValue={formatMoney(totals.profit)}
             money
+            icon={TrendingUp}
+            tone={totals.profit >= 0 ? 'green' : 'red'}
           />
 
           <ReportCard
@@ -711,55 +796,53 @@ export default function ReportsPage() {
             value={formatCompactMoney(totals.receivable)}
             fullValue={formatMoney(totals.receivable)}
             money
+            icon={HandCoins}
           />
         </div>
 
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <ReportCard title="Pedidos" value={filteredOrders.length} />
-          <ReportCard title="Clientes" value={clients.length} />
-          <ReportCard title="Produtos" value={products.length} />
-          <ReportCard title="Estoque baixo" value={totals.lowStock} />
+        <div className="mb-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <ReportCard title="Pedidos" value={filteredOrders.length} icon={ClipboardList} />
+          <ReportCard title="Clientes" value={clients.length} icon={Users} />
+          <ReportCard title="Produtos" value={products.length} icon={Package} />
+          <ReportCard title="Estoque baixo" value={totals.lowStock} icon={AlertTriangle} tone={totals.lowStock > 0 ? 'red' : 'yellow'} />
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 mb-8">
-          <h2 className="text-2xl font-black text-yellow-400 mb-2">
-            Comparativo de lucro por mês
-          </h2>
-
-          <p className="text-zinc-500 mb-6">
-            Comparação dos últimos 12 meses com receita, despesas e lucro.
-          </p>
-
+        <PremiumPanel
+          title="Comparativo de lucro por mês"
+          description="Comparação dos últimos 12 meses com receita, despesas e lucro."
+          icon={TrendingUp}
+        >
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyChart}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(250,204,21,.12)" />
                 <XAxis
                   dataKey="monthLabel"
-                  stroke="#a1a1aa"
+                  stroke="#d4d4d8"
                   fontSize={12}
                 />
                 <YAxis
-                  stroke="#a1a1aa"
+                  stroke="#d4d4d8"
                   fontSize={12}
                   tickFormatter={(value) => formatCompactMoney(value)}
                 />
                 <Tooltip
                   formatter={(value: any) => formatMoney(value)}
                   contentStyle={{
-                    background: '#18181b',
-                    border: '1px solid #3f3f46',
-                    borderRadius: '12px',
+                    background: '#050505',
+                    border: '1px solid rgba(250, 204, 21, .25)',
+                    borderRadius: '16px',
                     color: '#fff',
+                    boxShadow: '0 0 35px rgba(245, 158, 11, .14)',
                   }}
                 />
-                <Bar dataKey="receita" name="Receita" fill="#22c55e" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="despesas" name="Despesas" fill="#ef4444" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="lucro" name="Lucro" fill="#facc15" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="receita" name="Receita" fill="#22c55e" radius={[10, 10, 0, 0]} />
+                <Bar dataKey="despesas" name="Despesas" fill="#ef4444" radius={[10, 10, 0, 0]} />
+                <Bar dataKey="lucro" name="Lucro" fill="#facc15" radius={[10, 10, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </PremiumPanel>
       </div>
 
       <div

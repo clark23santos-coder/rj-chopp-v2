@@ -8,6 +8,16 @@ import {
   Truck,
   PackageCheck,
   X,
+  Search,
+  RefreshCcw,
+  CalendarDays,
+  User,
+  Phone,
+  MapPin,
+  Wallet,
+  Package,
+  AlertTriangle,
+  ClipboardList,
 } from 'lucide-react';
 
 import Layout from '../components/Layout';
@@ -22,7 +32,7 @@ import {
 } from '../services/offline';
 
 const inputClass =
-  'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
+  'w-full bg-black/55 border border-yellow-500/20 rounded-2xl px-4 py-3 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-black/70 focus:shadow-[0_0_28px_rgba(250,204,21,.14)]';
 
 const WITHDRAWALS_STORAGE_KEY = 'rjchopp_withdrawals';
 const ORDER_META_STORAGE_KEY = 'rjchopp_order_meta';
@@ -37,6 +47,31 @@ const defaultCompanySettings = {
   noteMessage: 'Obrigado pela preferência.',
   reportFooter: 'Relatório gerado pelo sistema RJ Chopp SGE',
 };
+
+function Field({ label, children }: any) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-black text-yellow-200">
+        {label}
+      </label>
+
+      {children}
+    </div>
+  );
+}
+
+function PremiumPanel({ children }: any) {
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/50 shadow-[0_0_38px_rgba(245,158,11,.08)] backdrop-blur-xl">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,.10),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.05),transparent_38%,rgba(250,204,21,.035))]" />
+      <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+
+      <div className="relative">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function formatMoney(value: any) {
   return new Intl.NumberFormat('pt-BR', {
@@ -104,18 +139,18 @@ function getStatusClass(status: string) {
   const value = String(status || '').toUpperCase();
 
   if (value === 'FINISHED' || value === 'PAGO') {
-    return 'bg-green-500/20 text-green-400';
+    return 'border-green-500/25 bg-green-500/15 text-green-400';
   }
 
   if (value === 'APPROVED') {
-    return 'bg-blue-500/20 text-blue-400';
+    return 'border-blue-500/25 bg-blue-500/15 text-blue-400';
   }
 
   if (value === 'CANCELLED' || value === 'CANCELED') {
-    return 'bg-red-500/20 text-red-400';
+    return 'border-red-500/25 bg-red-500/15 text-red-400';
   }
 
-  return 'bg-yellow-500/20 text-yellow-400';
+  return 'border-yellow-500/25 bg-yellow-500/15 text-yellow-400';
 }
 
 function buildOrderNote(data: any) {
@@ -372,6 +407,7 @@ export default function OrdersPage() {
         ...offlineOrders,
         ...onlineOrders,
       ]);
+
       setClients(Array.isArray(clientsResponse.data) ? clientsResponse.data : []);
       setProducts(Array.isArray(productsResponse.data) ? productsResponse.data : []);
     } catch (error) {
@@ -499,6 +535,34 @@ export default function OrdersPage() {
 
     return matchesSearch && matchesStatus && matchesPayment && matchesReturn;
   });
+
+  const orderStats = useMemo(() => {
+    const open = filteredOrders.filter((order) => {
+      const status = String(order.status || '').toUpperCase();
+      return status === 'PENDING' || !status;
+    }).length;
+
+    const delivered = filteredOrders.filter((order) => {
+      const status = String(order.status || '').toUpperCase();
+      return status === 'APPROVED';
+    }).length;
+
+    const late = filteredOrders.filter((order) => {
+      const meta = getOrderMeta(order.id);
+      return isLateScheduledOrder(order, meta, today);
+    }).length;
+
+    const total = filteredOrders.reduce((sum, order) => {
+      return sum + Number(order.total || 0);
+    }, 0);
+
+    return {
+      open,
+      delivered,
+      late,
+      total,
+    };
+  }, [filteredOrders, today]);
 
   function findChopeiraProduct() {
     return products.find((product) => isChopeiraProduct(product));
@@ -1192,27 +1256,88 @@ export default function OrdersPage() {
       <div className="no-print">
         <PageHeader
           title="Pedidos"
-          description="Pedidos em aberto. Depois de entregue, o pedido vai para Retiradas"
+          description="Controle de pedidos, entregas, estoque agendado, notas e retiradas automáticas."
         />
 
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <input
-            placeholder="Pesquisar por cliente, telefone, endereço, pagamento ou retirada..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className={inputClass}
-          />
+        <div className="mb-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/52 p-5 shadow-[0_0_35px_rgba(245,158,11,.08)] backdrop-blur-xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(250,204,21,.14),transparent_36%)]" />
+            <div className="relative flex items-start justify-between gap-4">
+              <div>
+                <p className="font-black text-zinc-300">Pedidos listados</p>
+                <p className="mt-6 text-4xl font-black text-white">{filteredOrders.length}</p>
+              </div>
+              <div className="rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-yellow-400">
+                <ClipboardList size={22} />
+              </div>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/52 p-5 shadow-[0_0_35px_rgba(245,158,11,.08)] backdrop-blur-xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(250,204,21,.14),transparent_36%)]" />
+            <div className="relative flex items-start justify-between gap-4">
+              <div>
+                <p className="font-black text-zinc-300">Pendentes</p>
+                <p className="mt-6 text-4xl font-black text-white">{orderStats.open}</p>
+              </div>
+              <div className="rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-yellow-400">
+                <CalendarDays size={22} />
+              </div>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-[2rem] border border-blue-500/15 bg-black/52 p-5 shadow-[0_0_35px_rgba(59,130,246,.08)] backdrop-blur-xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,.14),transparent_36%)]" />
+            <div className="relative flex items-start justify-between gap-4">
+              <div>
+                <p className="font-black text-zinc-300">Em retirada</p>
+                <p className="mt-6 text-4xl font-black text-white">{orderStats.delivered}</p>
+              </div>
+              <div className="rounded-2xl border border-blue-500/25 bg-blue-500/10 p-3 text-blue-400">
+                <Truck size={22} />
+              </div>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-[2rem] border border-red-500/15 bg-black/52 p-5 shadow-[0_0_35px_rgba(239,68,68,.08)] backdrop-blur-xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(239,68,68,.14),transparent_36%)]" />
+            <div className="relative flex items-start justify-between gap-4">
+              <div>
+                <p className="font-black text-zinc-300">Total filtrado</p>
+                <p className="mt-6 text-3xl font-black text-white">{formatMoney(orderStats.total)}</p>
+              </div>
+              <div className="rounded-2xl border border-red-500/25 bg-red-500/10 p-3 text-red-400">
+                <Wallet size={22} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-6 grid gap-4 xl:grid-cols-[1fr_auto]">
+          <div className="relative">
+            <Search
+              size={20}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400"
+            />
+
+            <input
+              placeholder="Pesquisar por cliente, telefone, endereço, pagamento ou retirada..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className={`${inputClass} pl-12`}
+            />
+          </div>
 
           <button
             onClick={openNewOrder}
-            className="bg-yellow-400 text-black rounded-2xl px-6 py-3 font-black flex items-center justify-center gap-2"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 px-6 py-3 font-black text-black shadow-[0_0_30px_rgba(250,204,21,.22)] transition hover:scale-[1.01] hover:shadow-[0_0_45px_rgba(250,204,21,.35)]"
           >
             <Plus size={20} />
             Novo Pedido
           </button>
         </div>
 
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
+        <div className="mb-8 grid gap-4 md:grid-cols-4">
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
@@ -1253,511 +1378,574 @@ export default function OrdersPage() {
 
           <button
             onClick={loadData}
-            className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-6 py-3 font-bold"
+            className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-6 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
           >
+            <RefreshCcw size={18} />
             Atualizar
           </button>
         </div>
 
-        <div className="bg-zinc-900 rounded-3xl border border-zinc-800 overflow-x-auto">
-          <table className="w-full min-w-[1250px]">
-            <thead className="bg-black">
-              <tr className="text-left text-zinc-400">
-                <th className="p-5">Cliente</th>
-                <th className="p-5">Telefone</th>
-                <th className="p-5">Entrega</th>
-                <th className="p-5">Buscar volta</th>
-                <th className="p-5">Itens</th>
-                <th className="p-5">Pagamento</th>
-                <th className="p-5">Total</th>
-                <th className="p-5">Status</th>
-                <th className="p-5">Estoque</th>
-                <th className="p-5">Ações</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredOrders.map((order) => {
-                const meta = getOrderMeta(order.id);
-                const status = String(order.status || '').toUpperCase();
-                const lateScheduledOrder = isLateScheduledOrder(order, meta, today);
-
-                return (
-                  <tr
-                    key={order.id}
-                    className={`border-t border-zinc-800 ${
-                      lateScheduledOrder ? 'bg-red-500/10' : ''
-                    }`}
-                  >
-                    <td className="p-5 font-bold">
-                      {order.client?.name || 'Cliente não informado'}
-
-                      {order.offlinePending && (
-                        <p className="text-xs text-yellow-400 font-black mt-1">
-                          Pendente de sincronizar
-                        </p>
-                      )}
-
-                      <p className="text-xs text-zinc-500 mt-1">
-                        {order.client?.address || 'Sem endereço'}
-                      </p>
-                    </td>
-
-                    <td className="p-5 text-zinc-400">
-                      {order.client?.phone || '-'}
-                    </td>
-
-                    <td className="p-5 text-zinc-400">
-                      <div>
-                        <p>{formatDate(meta.deliveryDate)}</p>
-
-                        {lateScheduledOrder && (
-                          <p className="text-xs text-red-400 font-black mt-1">
-                            Pedido atrasado
-                          </p>
-                        )}
-
-                        {isFutureScheduledOrder(order, meta, today) && (
-                          <p className="text-xs text-blue-400 font-bold mt-1">
-                            Pedido agendado
-                          </p>
-                        )}
-
-                        {isScheduledForToday(order, meta, today) && (
-                          <p className="text-xs text-yellow-400 font-bold mt-1">
-                            Entrega hoje
-                          </p>
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="p-5 text-zinc-400">
-                      {meta.pickupDate ? (
-                        <div>
-                          <p className="font-bold text-yellow-400">
-                            {formatDate(meta.pickupDate)}
-                          </p>
-                          <p className="text-xs text-zinc-500">
-                            {meta.returnItems || 'Sem itens informados'}
-                          </p>
-                        </div>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-
-                    <td className="p-5 text-zinc-400">
-                      <div className="space-y-1">
-                        {getOrderItems(order).map((item: any) => (
-                          <p key={item.id || `${item.productId}-${item.quantity}`}>
-                            {item.quantity}x {getProductName(item)}
-                          </p>
-                        ))}
-                      </div>
-                    </td>
-
-                    <td className="p-5 text-zinc-400">
-                      {order.paymentMethod || '-'}
-                    </td>
-
-                    <td className="p-5 text-yellow-400 font-black">
-                      {formatMoney(order.total)}
-                    </td>
-
-                    <td className="p-5">
-                      {lateScheduledOrder ? (
-                        <span className="bg-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-black">
-                          Pedido atrasado
-                        </span>
-                      ) : (
-                        <span
-                          className={`${getStatusClass(order.status)} px-4 py-2 rounded-full text-sm font-bold`}
-                        >
-                          {getStatusLabel(order.status)}
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="p-5">
-                      {hasStockAlreadyDiscounted(order, meta) ? (
-                        <span className="bg-green-500/20 text-green-400 px-4 py-2 rounded-full text-sm font-bold">
-                          Baixado
-                        </span>
-                      ) : lateScheduledOrder ? (
-                        <span className="bg-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-bold">
-                          Atrasado
-                        </span>
-                      ) : (
-                        <span className="bg-blue-500/20 text-blue-400 px-4 py-2 rounded-full text-sm font-bold">
-                          Agendado
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="p-5">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setSelectedOrder(order)}
-                          className="bg-zinc-800 hover:bg-zinc-700 rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2"
-                        >
-                          <FileText size={17} />
-                          Nota
-                        </button>
-
-                        <button
-                          disabled={order.offlinePending}
-                          onClick={() => openEditOrder(order)}
-                          className="bg-zinc-800 hover:bg-zinc-700 rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
-                        >
-                          <Pencil size={17} />
-                          Editar
-                        </button>
-
-                        {status !== 'APPROVED' && status !== 'FINISHED' && (
-                          <button
-                            disabled={order.offlinePending}
-                            onClick={() => openDeliveryModal(order)}
-                            className="bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
-                          >
-                            <Truck size={17} />
-                            Foi entregue
-                          </button>
-                        )}
-
-                        {status === 'APPROVED' && (
-                          <button
-                            onClick={() => finalizeOrder(order)}
-                            className="bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2"
-                          >
-                            <PackageCheck size={17} />
-                            Finalizar
-                          </button>
-                        )}
-
-                        {status !== 'FINISHED' && (
-                          <button
-                            onClick={() => cancelOrder(order)}
-                            className="bg-orange-500/20 text-orange-400 hover:bg-orange-500 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2"
-                          >
-                            <X size={17} />
-                            Cancelar
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => deleteOrder(order)}
-                          className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-xl px-3 py-2 text-sm font-bold flex items-center gap-2"
-                        >
-                          <Trash2 size={17} />
-                          Apagar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {filteredOrders.length === 0 && (
-                <tr>
-                  <td className="p-5 text-zinc-500" colSpan={10}>
-                    Nenhum pedido encontrado.
-                  </td>
+        <PremiumPanel>
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[1250px]">
+              <thead>
+                <tr className="border-b border-yellow-500/15 bg-black/45 text-left text-sm font-black uppercase tracking-wide text-zinc-400">
+                  <th className="p-5">Cliente</th>
+                  <th className="p-5">Telefone</th>
+                  <th className="p-5">Entrega</th>
+                  <th className="p-5">Buscar volta</th>
+                  <th className="p-5">Itens</th>
+                  <th className="p-5">Pagamento</th>
+                  <th className="p-5">Total</th>
+                  <th className="p-5">Status</th>
+                  <th className="p-5">Estoque</th>
+                  <th className="p-5">Ações</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              </thead>
 
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 no-print">
-          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
-            <h2 className="text-3xl font-black text-yellow-400 mb-6">
-              {editingOrder ? 'Editar Pedido' : 'Novo Pedido'}
-            </h2>
-
-            <form onSubmit={saveOrder} className="space-y-6">
-              <select
-                name="clientId"
-                defaultValue={editingOrder?.clientId || editingOrder?.client?.id || ''}
-                className={inputClass}
-              >
-                <option value="">Selecione um cliente</option>
-
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name} - {client.phone}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                name="paymentMethod"
-                defaultValue={editingOrder?.paymentMethod || 'PIX'}
-                className={inputClass}
-              >
-                <option value="PIX">PIX</option>
-                <option value="DINHEIRO">Dinheiro</option>
-                <option value="CARTAO">Cartão</option>
-                <option value="FIADO">Fiado</option>
-              </select>
-
-              <div>
-                <label className="block mb-2 text-sm font-bold text-zinc-300">
-                  Data da entrega
-                </label>
-
-                <input
-                  name="deliveryDate"
-                  type="date"
-                  defaultValue={
-                    editingOrder ? getOrderMeta(editingOrder.id)?.deliveryDate || '' : ''
-                  }
-                  className={inputClass}
-                />
-              </div>
-
-              {!editingOrder && (
-                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5">
-                  <label className="block mb-3 text-sm font-bold text-zinc-300">
-                    Descontar estoque agora?
-                  </label>
-
-                  <select
-                    name="discountStockNow"
-                    defaultValue="SIM"
-                    className={inputClass}
-                  >
-                    <option value="SIM">
-                      Sim, baixar estoque agora
-                    </option>
-
-                    <option value="NAO">
-                      Não, deixar pedido agendado
-                    </option>
-                  </select>
-
-                  <p className="text-zinc-500 text-sm mt-3">
-                    Escolha “Não” para pedido futuro. Nesse caso o estoque só baixa quando clicar em “Foi entregue”.
-                  </p>
-                </div>
-              )}
-
-              {editingOrder && (
-                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5">
-                  <p className="text-sm font-bold text-zinc-300 mb-2">
-                    Situação do estoque
-                  </p>
-
-                  {hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id)) ? (
-                    <p className="text-green-400 font-black">
-                      Estoque já foi descontado
-                    </p>
-                  ) : (
-                    <p className="text-blue-400 font-black">
-                      Pedido agendado sem descontar estoque
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <textarea
-                name="observation"
-                placeholder="Observação do pedido. Ex: entregar depois das 18h..."
-                defaultValue={
-                  editingOrder ? getOrderMeta(editingOrder.id)?.observation || '' : ''
-                }
-                className={`${inputClass} min-h-[100px]`}
-              />
-
-              <div className="space-y-4">
-                <h3 className="text-xl font-black text-yellow-400">
-                  Produtos
-                </h3>
-
-                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4">
-                  <p className="text-sm text-zinc-400">
-                    Ao adicionar um produto de chopp/barril, o sistema sugere automaticamente
-                    <span className="text-yellow-400 font-bold"> 1 chopeira </span>
-                    e
-                    <span className="text-yellow-400 font-bold"> 1 cilindro</span>.
-                    Você pode editar a quantidade ou remover na hora.
-                  </p>
-                </div>
-
-                {orderItems.map((item, index) => {
-                  const product = products.find(
-                    (productItem) => productItem.id === item.productId
-                  );
-
-                  const isAutomaticAccessory =
-                    isChopeiraProduct(product) || isCilindroProduct(product);
+              <tbody>
+                {filteredOrders.map((order) => {
+                  const meta = getOrderMeta(order.id);
+                  const status = String(order.status || '').toUpperCase();
+                  const lateScheduledOrder = isLateScheduledOrder(order, meta, today);
 
                   return (
-                    <div
-                      key={index}
-                      className="grid md:grid-cols-[1fr_120px_120px] gap-3"
+                    <tr
+                      key={order.id}
+                      className={`border-t border-yellow-500/10 transition hover:bg-yellow-400/[0.035] ${
+                        lateScheduledOrder ? 'bg-red-500/10' : ''
+                      }`}
                     >
-                      <select
-                        value={item.productId}
-                        onChange={(event) =>
-                          updateItem(index, 'productId', event.target.value)
-                        }
-                        className={inputClass}
-                      >
-                        <option value="">Selecione um produto</option>
+                      <td className="p-5">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-yellow-400">
+                            <User size={18} />
+                          </div>
 
-                        {getProductsForOrderSelect(products, item.productId).map((productItem) => (
-                          <option key={productItem.id} value={productItem.id}>
-                            {getProductDisplayName(productItem)} - {formatMoney(productItem.salePrice)}
-                          </option>
-                        ))}
-                      </select>
+                          <div>
+                            <p className="font-black text-white">
+                              {order.client?.name || 'Cliente não informado'}
+                            </p>
 
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(event) =>
-                          updateItem(index, 'quantity', event.target.value)
-                        }
-                        className={inputClass}
-                      />
+                            {order.offlinePending && (
+                              <p className="mt-1 text-xs font-black text-yellow-400">
+                                Pendente de sincronizar
+                              </p>
+                            )}
 
-                      <button
-                        type="button"
-                        onClick={() => removeItem(index)}
-                        className="bg-red-500/20 text-red-400 rounded-2xl font-bold"
-                      >
-                        Remover
-                      </button>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              {order.client?.address || 'Sem endereço'}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
 
-                      {product && (
-                        <div className="md:col-span-3 flex flex-col md:flex-row md:items-center gap-2">
-                          <p className="text-sm text-zinc-500">
-                            Estoque atual: {product.stock} {product.unit}
-                          </p>
+                      <td className="p-5 text-zinc-400">
+                        <div className="flex items-center gap-2">
+                          <Phone size={16} className="text-yellow-400" />
+                          {order.client?.phone || '-'}
+                        </div>
+                      </td>
 
-                          {isAutomaticAccessory && (
-                            <span className="w-fit bg-yellow-400/20 text-yellow-400 px-3 py-1 rounded-full text-xs font-black">
-                              Sugestão automática editável
-                            </span>
+                      <td className="p-5 text-zinc-400">
+                        <div>
+                          <p>{formatDate(meta.deliveryDate)}</p>
+
+                          {lateScheduledOrder && (
+                            <p className="mt-1 text-xs font-black text-red-400">
+                              Pedido atrasado
+                            </p>
+                          )}
+
+                          {isFutureScheduledOrder(order, meta, today) && (
+                            <p className="mt-1 text-xs font-bold text-blue-400">
+                              Pedido agendado
+                            </p>
+                          )}
+
+                          {isScheduledForToday(order, meta, today) && (
+                            <p className="mt-1 text-xs font-bold text-yellow-400">
+                              Entrega hoje
+                            </p>
                           )}
                         </div>
-                      )}
-                    </div>
+                      </td>
+
+                      <td className="p-5 text-zinc-400">
+                        {meta.pickupDate ? (
+                          <div>
+                            <p className="font-bold text-yellow-400">
+                              {formatDate(meta.pickupDate)}
+                            </p>
+
+                            <p className="text-xs text-zinc-500">
+                              {meta.returnItems || 'Sem itens informados'}
+                            </p>
+                          </div>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+
+                      <td className="p-5 text-zinc-400">
+                        <div className="space-y-1">
+                          {getOrderItems(order).map((item: any) => (
+                            <p key={item.id || `${item.productId}-${item.quantity}`}>
+                              {item.quantity}x {getProductName(item)}
+                            </p>
+                          ))}
+                        </div>
+                      </td>
+
+                      <td className="p-5 text-zinc-400">
+                        {order.paymentMethod || '-'}
+                      </td>
+
+                      <td className="p-5 font-black text-yellow-400">
+                        {formatMoney(order.total)}
+                      </td>
+
+                      <td className="p-5">
+                        {lateScheduledOrder ? (
+                          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/25 bg-red-500/15 px-4 py-2 text-sm font-black text-red-400">
+                            <AlertTriangle size={16} />
+                            Pedido atrasado
+                          </span>
+                        ) : (
+                          <span
+                            className={`${getStatusClass(order.status)} inline-flex rounded-full border px-4 py-2 text-sm font-black`}
+                          >
+                            {getStatusLabel(order.status)}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="p-5">
+                        {hasStockAlreadyDiscounted(order, meta) ? (
+                          <span className="inline-flex rounded-full border border-green-500/25 bg-green-500/15 px-4 py-2 text-sm font-black text-green-400">
+                            Baixado
+                          </span>
+                        ) : lateScheduledOrder ? (
+                          <span className="inline-flex rounded-full border border-red-500/25 bg-red-500/15 px-4 py-2 text-sm font-black text-red-400">
+                            Atrasado
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full border border-blue-500/25 bg-blue-500/15 px-4 py-2 text-sm font-black text-blue-400">
+                            Agendado
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="p-5">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setSelectedOrder(order)}
+                            className="flex items-center gap-2 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-sm font-black text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+                          >
+                            <FileText size={17} />
+                            Nota
+                          </button>
+
+                          <button
+                            disabled={order.offlinePending}
+                            onClick={() => openEditOrder(order)}
+                            className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-black/45 px-3 py-2 text-sm font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400 disabled:opacity-50"
+                          >
+                            <Pencil size={17} />
+                            Editar
+                          </button>
+
+                          {status !== 'APPROVED' && status !== 'FINISHED' && (
+                            <button
+                              disabled={order.offlinePending}
+                              onClick={() => openDeliveryModal(order)}
+                              className="flex items-center gap-2 rounded-xl border border-blue-500/25 bg-blue-500/15 px-3 py-2 text-sm font-black text-blue-400 transition hover:bg-blue-500 hover:text-white disabled:opacity-50"
+                            >
+                              <Truck size={17} />
+                              Foi entregue
+                            </button>
+                          )}
+
+                          {status === 'APPROVED' && (
+                            <button
+                              onClick={() => finalizeOrder(order)}
+                              className="flex items-center gap-2 rounded-xl border border-green-500/25 bg-green-500/15 px-3 py-2 text-sm font-black text-green-400 transition hover:bg-green-500 hover:text-white"
+                            >
+                              <PackageCheck size={17} />
+                              Finalizar
+                            </button>
+                          )}
+
+                          {status !== 'FINISHED' && (
+                            <button
+                              onClick={() => cancelOrder(order)}
+                              className="flex items-center gap-2 rounded-xl border border-orange-500/25 bg-orange-500/15 px-3 py-2 text-sm font-black text-orange-400 transition hover:bg-orange-500 hover:text-white"
+                            >
+                              <X size={17} />
+                              Cancelar
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => deleteOrder(order)}
+                            className="flex items-center gap-2 rounded-xl border border-red-500/25 bg-red-500/15 px-3 py-2 text-sm font-black text-red-400 transition hover:bg-red-500 hover:text-white"
+                          >
+                            <Trash2 size={17} />
+                            Apagar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
 
+                {filteredOrders.length === 0 && (
+                  <tr>
+                    <td className="p-6 text-zinc-500" colSpan={10}>
+                      Nenhum pedido encontrado.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </PremiumPanel>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm no-print">
+          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-yellow-500/20 bg-black/90 p-8 shadow-[0_0_70px_rgba(245,158,11,.20)] custom-scrollbar">
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(250,204,21,.13),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.06),transparent_38%,rgba(250,204,21,.04))]" />
+
+            <div className="relative">
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <p className="mb-2 text-xs font-black uppercase tracking-[0.35em] text-yellow-400/80">
+                    Pedidos
+                  </p>
+
+                  <h2 className="text-3xl font-black text-white">
+                    {editingOrder ? 'Editar Pedido' : 'Novo Pedido'}
+                  </h2>
+                </div>
+
                 <button
                   type="button"
-                  onClick={addItem}
-                  className="bg-zinc-800 rounded-2xl px-5 py-3 font-bold"
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingOrder(null);
+                  }}
+                  className="rounded-2xl border border-yellow-500/20 bg-black/45 p-3 text-zinc-300 transition hover:bg-yellow-400 hover:text-black"
                 >
-                  Adicionar Produto
+                  <X size={22} />
                 </button>
               </div>
 
-              <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5">
-                <p className="text-zinc-400 font-bold">
-                  Total do pedido
-                </p>
+              <form onSubmit={saveOrder} className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Cliente">
+                    <select
+                      name="clientId"
+                      defaultValue={editingOrder?.clientId || editingOrder?.client?.id || ''}
+                      className={inputClass}
+                    >
+                      <option value="">Selecione um cliente</option>
 
-                <p className="text-3xl font-black text-yellow-400">
-                  {formatMoney(calculateTotal())}
-                </p>
-              </div>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name} - {client.phone}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
 
-              <button
-                disabled={loading}
-                className="w-full bg-yellow-400 text-black rounded-2xl py-4 font-black disabled:opacity-50"
-              >
-                {loading ? 'Salvando...' : 'Salvar Pedido'}
-              </button>
+                  <Field label="Forma de pagamento">
+                    <select
+                      name="paymentMethod"
+                      defaultValue={editingOrder?.paymentMethod || 'PIX'}
+                      className={inputClass}
+                    >
+                      <option value="PIX">PIX</option>
+                      <option value="DINHEIRO">Dinheiro</option>
+                      <option value="CARTAO">Cartão</option>
+                      <option value="FIADO">Fiado</option>
+                    </select>
+                  </Field>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setShowModal(false);
-                  setEditingOrder(null);
-                }}
-                className="w-full bg-zinc-800 rounded-2xl py-4 font-bold"
-              >
-                Cancelar
-              </button>
-            </form>
+                  <Field label="Data da entrega">
+                    <input
+                      name="deliveryDate"
+                      type="date"
+                      defaultValue={
+                        editingOrder ? getOrderMeta(editingOrder.id)?.deliveryDate || '' : ''
+                      }
+                      className={inputClass}
+                    />
+                  </Field>
+
+                  {!editingOrder && (
+                    <Field label="Descontar estoque agora?">
+                      <select
+                        name="discountStockNow"
+                        defaultValue="SIM"
+                        className={inputClass}
+                      >
+                        <option value="SIM">
+                          Sim, baixar estoque agora
+                        </option>
+
+                        <option value="NAO">
+                          Não, deixar pedido agendado
+                        </option>
+                      </select>
+                    </Field>
+                  )}
+                </div>
+
+                {!editingOrder && (
+                  <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5 text-blue-300">
+                    <p className="font-bold">
+                      Escolha “Não” para pedido futuro. Nesse caso o estoque só baixa quando clicar em “Foi entregue”.
+                    </p>
+                  </div>
+                )}
+
+                {editingOrder && (
+                  <div className="rounded-2xl border border-yellow-500/15 bg-black/45 p-5">
+                    <p className="mb-2 text-sm font-black text-zinc-300">
+                      Situação do estoque
+                    </p>
+
+                    {hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id)) ? (
+                      <p className="font-black text-green-400">
+                        Estoque já foi descontado
+                      </p>
+                    ) : (
+                      <p className="font-black text-blue-400">
+                        Pedido agendado sem descontar estoque
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <Field label="Observação">
+                  <textarea
+                    name="observation"
+                    placeholder="Observação do pedido. Ex: entregar depois das 18h..."
+                    defaultValue={
+                      editingOrder ? getOrderMeta(editingOrder.id)?.observation || '' : ''
+                    }
+                    className={`${inputClass} min-h-[110px] resize-none`}
+                  />
+                </Field>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-yellow-400">
+                      <Package size={22} />
+                    </div>
+
+                    <h3 className="text-xl font-black text-yellow-400">
+                      Produtos
+                    </h3>
+                  </div>
+
+                  <div className="rounded-2xl border border-yellow-500/15 bg-black/45 p-4">
+                    <p className="text-sm text-zinc-400">
+                      Ao adicionar um produto de chopp/barril, o sistema sugere automaticamente
+                      <span className="font-bold text-yellow-400"> 1 chopeira </span>
+                      e
+                      <span className="font-bold text-yellow-400"> 1 cilindro</span>.
+                      Você pode editar a quantidade ou remover na hora.
+                    </p>
+                  </div>
+
+                  {orderItems.map((item, index) => {
+                    const product = products.find(
+                      (productItem) => productItem.id === item.productId
+                    );
+
+                    const isAutomaticAccessory =
+                      isChopeiraProduct(product) || isCilindroProduct(product);
+
+                    return (
+                      <div
+                        key={index}
+                        className="rounded-2xl border border-yellow-500/10 bg-black/45 p-4"
+                      >
+                        <div className="grid gap-3 md:grid-cols-[1fr_120px_120px]">
+                          <select
+                            value={item.productId}
+                            onChange={(event) =>
+                              updateItem(index, 'productId', event.target.value)
+                            }
+                            className={inputClass}
+                          >
+                            <option value="">Selecione um produto</option>
+
+                            {getProductsForOrderSelect(products, item.productId).map((productItem) => (
+                              <option key={productItem.id} value={productItem.id}>
+                                {getProductDisplayName(productItem)} - {formatMoney(productItem.salePrice)}
+                              </option>
+                            ))}
+                          </select>
+
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(event) =>
+                              updateItem(index, 'quantity', event.target.value)
+                            }
+                            className={inputClass}
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => removeItem(index)}
+                            className="rounded-2xl border border-red-500/25 bg-red-500/15 font-black text-red-400 transition hover:bg-red-500 hover:text-white"
+                          >
+                            Remover
+                          </button>
+                        </div>
+
+                        {product && (
+                          <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center">
+                            <p className="text-sm text-zinc-500">
+                              Estoque atual: {product.stock} {product.unit}
+                            </p>
+
+                            {isAutomaticAccessory && (
+                              <span className="w-fit rounded-full border border-yellow-500/25 bg-yellow-500/15 px-3 py-1 text-xs font-black text-yellow-400">
+                                Sugestão automática editável
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={addItem}
+                    className="rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                  >
+                    Adicionar Produto
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-yellow-500/15 bg-black/45 p-5">
+                  <p className="font-bold text-zinc-400">
+                    Total do pedido
+                  </p>
+
+                  <p className="text-3xl font-black text-yellow-400">
+                    {formatMoney(calculateTotal())}
+                  </p>
+                </div>
+
+                <button
+                  disabled={loading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 py-4 font-black text-black shadow-[0_0_35px_rgba(250,204,21,.26)] transition hover:scale-[1.01] disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Salvar Pedido'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingOrder(null);
+                  }}
+                  className="w-full rounded-2xl border border-yellow-500/15 bg-black/45 py-4 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                >
+                  Cancelar
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {deliveryOrder && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 no-print">
-          <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
-            <h2 className="text-3xl font-black text-yellow-400 mb-2">
-              Pedido entregue
-            </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm no-print">
+          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-yellow-500/20 bg-black/90 p-8 shadow-[0_0_70px_rgba(245,158,11,.20)] custom-scrollbar">
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(250,204,21,.13),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.06),transparent_38%,rgba(250,204,21,.04))]" />
 
-            <p className="text-zinc-400 mb-6">
-              Agora informe quando e o que precisa buscar de volta.
-            </p>
-
-            <form onSubmit={confirmDelivered} className="space-y-4">
-              <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4">
-                <p className="text-zinc-500 text-sm font-bold">
-                  Cliente
+            <div className="relative">
+              <div className="mb-6">
+                <p className="mb-2 text-xs font-black uppercase tracking-[0.35em] text-yellow-400/80">
+                  Entrega
                 </p>
 
-                <p className="text-xl font-black">
-                  {deliveryOrder.client?.name || 'Cliente não informado'}
-                </p>
+                <h2 className="text-3xl font-black text-white">
+                  Pedido entregue
+                </h2>
 
-                <p className="text-zinc-400">
-                  {deliveryOrder.client?.address || 'Sem endereço'}
+                <p className="mt-2 text-zinc-400">
+                  Agora informe quando e o que precisa buscar de volta.
                 </p>
               </div>
 
-              <div>
-                <label className="block mb-2 text-sm font-bold text-zinc-300">
-                  Data para buscar de volta
-                </label>
+              <form onSubmit={confirmDelivered} className="space-y-4">
+                <div className="rounded-2xl border border-yellow-500/15 bg-black/45 p-4">
+                  <p className="text-sm font-bold text-zinc-500">
+                    Cliente
+                  </p>
 
-                <input
-                  name="pickupDate"
-                  type="date"
-                  defaultValue={getOrderMeta(deliveryOrder.id)?.pickupDate || ''}
-                  className={inputClass}
-                />
-              </div>
+                  <p className="text-xl font-black text-white">
+                    {deliveryOrder.client?.name || 'Cliente não informado'}
+                  </p>
 
-              <textarea
-                name="returnItems"
-                placeholder="O que precisa buscar? Ex: 1 chopeira, 2 barris, cascos..."
-                defaultValue={getOrderMeta(deliveryOrder.id)?.returnItems || ''}
-                className={`${inputClass} min-h-[100px]`}
-              />
+                  <p className="text-zinc-400">
+                    {deliveryOrder.client?.address || 'Sem endereço'}
+                  </p>
+                </div>
 
-              <textarea
-                name="observation"
-                placeholder="Observação. Ex: ligar antes, buscar depois das 18h..."
-                defaultValue={getOrderMeta(deliveryOrder.id)?.observation || ''}
-                className={`${inputClass} min-h-[100px]`}
-              />
+                <Field label="Data para buscar de volta">
+                  <input
+                    name="pickupDate"
+                    type="date"
+                    defaultValue={getOrderMeta(deliveryOrder.id)?.pickupDate || ''}
+                    className={inputClass}
+                  />
+                </Field>
 
-              <button
-                disabled={loading}
-                className="w-full bg-yellow-400 text-black rounded-2xl py-4 font-black disabled:opacity-50"
-              >
-                {loading ? 'Salvando...' : 'Confirmar entrega e agendar retirada'}
-              </button>
+                <Field label="Itens para buscar">
+                  <textarea
+                    name="returnItems"
+                    placeholder="O que precisa buscar? Ex: 1 chopeira, 2 barris, cascos..."
+                    defaultValue={getOrderMeta(deliveryOrder.id)?.returnItems || ''}
+                    className={`${inputClass} min-h-[100px] resize-none`}
+                  />
+                </Field>
 
-              <button
-                type="button"
-                onClick={() => setDeliveryOrder(null)}
-                className="w-full bg-zinc-800 rounded-2xl py-4 font-bold"
-              >
-                Cancelar
-              </button>
-            </form>
+                <Field label="Observação">
+                  <textarea
+                    name="observation"
+                    placeholder="Observação. Ex: ligar antes, buscar depois das 18h..."
+                    defaultValue={getOrderMeta(deliveryOrder.id)?.observation || ''}
+                    className={`${inputClass} min-h-[100px] resize-none`}
+                  />
+                </Field>
+
+                <button
+                  disabled={loading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 py-4 font-black text-black shadow-[0_0_35px_rgba(250,204,21,.26)] transition hover:scale-[1.01] disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Confirmar entrega e agendar retirada'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryOrder(null)}
+                  className="w-full rounded-2xl border border-yellow-500/15 bg-black/45 py-4 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                >
+                  Cancelar
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -1765,7 +1953,7 @@ export default function OrdersPage() {
       {selectedOrder && (
         <div
           id="delivery-note-print-wrapper"
-          className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
         >
           <div
             id="delivery-note-print-card"
@@ -1828,6 +2016,7 @@ export default function OrdersPage() {
                       <p className="text-xs font-bold text-zinc-500 uppercase">
                         Cliente
                       </p>
+
                       <p className="font-black">
                         {selectedOrder.client?.name || 'Cliente não informado'}
                       </p>
@@ -1837,6 +2026,7 @@ export default function OrdersPage() {
                       <p className="text-xs font-bold text-zinc-500 uppercase">
                         Telefone
                       </p>
+
                       <p>
                         {selectedOrder.client?.phone || '-'}
                       </p>
@@ -1846,6 +2036,7 @@ export default function OrdersPage() {
                       <p className="text-xs font-bold text-zinc-500 uppercase">
                         Endereço
                       </p>
+
                       <p>
                         {selectedOrder.client?.address || '-'}
                       </p>
@@ -1863,6 +2054,7 @@ export default function OrdersPage() {
                       <p className="text-xs font-bold text-zinc-500 uppercase">
                         Pagamento
                       </p>
+
                       <p className="font-bold">
                         {selectedOrder.paymentMethod || '-'}
                       </p>
@@ -1872,6 +2064,7 @@ export default function OrdersPage() {
                       <p className="text-xs font-bold text-zinc-500 uppercase">
                         Status
                       </p>
+
                       <p className="font-bold">
                         {getStatusLabel(selectedOrder.status)}
                       </p>
@@ -1881,6 +2074,7 @@ export default function OrdersPage() {
                       <p className="text-xs font-bold text-zinc-500 uppercase">
                         Estoque
                       </p>
+
                       <p className="font-bold">
                         {hasStockAlreadyDiscounted(selectedOrder, getOrderMeta(selectedOrder.id))
                           ? 'Baixado'
@@ -1892,6 +2086,7 @@ export default function OrdersPage() {
                       <p className="text-xs font-bold text-zinc-500 uppercase">
                         Entrega
                       </p>
+
                       <p className="font-bold">
                         {formatDate(getOrderMeta(selectedOrder.id)?.deliveryDate)}
                       </p>
@@ -1901,6 +2096,7 @@ export default function OrdersPage() {
                       <p className="text-xs font-bold text-zinc-500 uppercase">
                         Buscar de volta
                       </p>
+
                       <p className="font-bold">
                         {formatDate(getOrderMeta(selectedOrder.id)?.pickupDate)}
                       </p>

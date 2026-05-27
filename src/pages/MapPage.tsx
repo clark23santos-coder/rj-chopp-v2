@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   CheckCircle,
   FileText,
+  CalendarDays,
+  Phone,
 } from 'lucide-react';
 
 import Layout from '../components/Layout';
@@ -21,7 +23,7 @@ import { addAuditLog } from '../services/audit';
 import { addOfflineAction, isOnline } from '../services/offline';
 
 const inputClass =
-  'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
+  'w-full bg-black/55 border border-yellow-500/20 rounded-2xl px-4 py-3 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-black/70 focus:shadow-[0_0_28px_rgba(250,204,21,.14)]';
 
 const WITHDRAWALS_STORAGE_KEY = 'rjchopp_withdrawals';
 const ORDER_META_STORAGE_KEY = 'rjchopp_order_meta';
@@ -155,14 +157,14 @@ function getTypeConfig(type: string) {
     return {
       label: 'Pedido',
       icon: ClipboardList,
-      className: 'bg-yellow-400/20 text-yellow-400',
+      className: 'border-yellow-500/25 bg-yellow-500/15 text-yellow-400',
     };
   }
 
   return {
     label: 'Retirada',
     icon: Truck,
-    className: 'bg-green-500/20 text-green-400',
+    className: 'border-green-500/25 bg-green-500/15 text-green-400',
   };
 }
 
@@ -214,6 +216,50 @@ function isOpenWithdrawal(withdrawal: any) {
     status !== 'RETIRADO' &&
     status !== 'CONCLUIDO' &&
     status !== 'CONCLUÍDO'
+  );
+}
+
+function PremiumPanel({ children }: any) {
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/50 shadow-[0_0_38px_rgba(245,158,11,.08)] backdrop-blur-xl">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,.10),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.05),transparent_38%,rgba(250,204,21,.035))]" />
+      <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+
+      <div className="relative">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon: Icon, tone = 'yellow' }: any) {
+  const toneClass =
+    tone === 'red'
+      ? 'border-red-500/25 bg-red-500/15 text-red-400'
+      : tone === 'green'
+        ? 'border-green-500/25 bg-green-500/15 text-green-400'
+        : 'border-yellow-500/25 bg-yellow-500/15 text-yellow-400';
+
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/52 p-5 shadow-[0_0_35px_rgba(245,158,11,.08)] backdrop-blur-xl">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(250,204,21,.13),transparent_35%)]" />
+
+      <div className="relative flex items-start justify-between gap-4">
+        <div>
+          <p className="font-black text-zinc-300">
+            {title}
+          </p>
+
+          <p className="mt-5 text-4xl font-black text-white">
+            {value}
+          </p>
+        </div>
+
+        <div className={`rounded-2xl border p-3 ${toneClass}`}>
+          <Icon size={22} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -512,19 +558,34 @@ export default function MapPage() {
     (location) => location.type === 'WITHDRAWAL' && location.isLate
   ).length;
 
+  const orderCount = locations.filter((location) => location.type === 'ORDER').length;
+  const withdrawalCount = locations.filter((location) => location.type === 'WITHDRAWAL').length;
+
   const activeAddress = selectedLocation?.address || '';
 
   return (
     <Layout>
       <PageHeader
         title="Mapa"
-        description="Rotas de hoje e retiradas atrasadas"
+        description="Rotas de hoje, pedidos atrasados, retiradas pendentes e rota com múltiplas paradas."
       />
 
+      <div className="mb-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard title="Rotas listadas" value={filteredLocations.length} icon={MapPin} />
+        <StatCard title="Pedidos" value={orderCount} icon={ClipboardList} />
+        <StatCard title="Retiradas" value={withdrawalCount} icon={Truck} tone="green" />
+        <StatCard title="Atrasados" value={lateOrdersCount + lateWithdrawalsCount} icon={AlertTriangle} tone={(lateOrdersCount + lateWithdrawalsCount) > 0 ? 'red' : 'yellow'} />
+      </div>
+
       {lateOrdersCount > 0 && (
-        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-5 mb-6">
-          <div className="flex items-center gap-3">
-            <AlertTriangle size={26} className="text-red-400" />
+        <div className="relative mb-6 overflow-hidden rounded-[2rem] border border-red-500/35 bg-red-500/12 p-5 backdrop-blur-xl">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,.18),transparent_35%)]" />
+
+          <div className="relative flex items-center gap-3">
+            <div className="rounded-2xl bg-red-500 p-3 text-white">
+              <AlertTriangle size={26} />
+            </div>
+
             <p className="font-black text-red-400">
               {lateOrdersCount} pedido(s) atrasado(s) aparecem no mapa para priorizar a entrega.
             </p>
@@ -533,9 +594,14 @@ export default function MapPage() {
       )}
 
       {lateWithdrawalsCount > 0 && (
-        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-5 mb-6">
-          <div className="flex items-center gap-3">
-            <AlertTriangle size={26} className="text-red-400" />
+        <div className="relative mb-6 overflow-hidden rounded-[2rem] border border-red-500/35 bg-red-500/12 p-5 backdrop-blur-xl">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,.18),transparent_35%)]" />
+
+          <div className="relative flex items-center gap-3">
+            <div className="rounded-2xl bg-red-500 p-3 text-white">
+              <AlertTriangle size={26} />
+            </div>
+
             <p className="font-black text-red-400">
               {lateWithdrawalsCount} retirada(s) atrasada(s) aparecem no mapa para priorizar a rota.
             </p>
@@ -543,136 +609,151 @@ export default function MapPage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-[450px_1fr] gap-6">
+      <div className="grid gap-6 xl:grid-cols-[460px_1fr]">
         <div className="space-y-5">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <Search size={20} className="text-yellow-400" />
+          <PremiumPanel>
+            <div className="p-5">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-yellow-400">
+                  <Search size={20} />
+                </div>
 
-              <h2 className="text-xl font-black text-yellow-400">
-                Rotas de hoje
-              </h2>
+                <h2 className="text-xl font-black text-yellow-400">
+                  Rotas de hoje
+                </h2>
+              </div>
+
+              <div className="mb-4 rounded-2xl border border-yellow-500/15 bg-black/45 p-4">
+                <p className="font-bold text-zinc-400">
+                  Hoje
+                </p>
+
+                <p className="text-2xl font-black text-yellow-400">
+                  {new Date(`${today}T12:00:00`).toLocaleDateString('pt-BR')}
+                </p>
+
+                {user?.role === 'DELIVERY' && (
+                  <p className="mt-2 text-sm text-zinc-500">
+                    Você está vendo entregas de hoje/atrasadas e retiradas de hoje/atrasadas.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search
+                    size={19}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400"
+                  />
+
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Buscar por cliente, telefone ou endereço..."
+                    className={`${inputClass} pl-12`}
+                  />
+                </div>
+
+                <select
+                  value={typeFilter}
+                  onChange={(event) => setTypeFilter(event.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Pedidos e retiradas</option>
+                  <option value="ORDER">Somente pedidos</option>
+                  <option value="WITHDRAWAL">Somente retiradas</option>
+                </select>
+
+                <button
+                  onClick={loadData}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                >
+                  <RefreshCcw size={18} />
+                  Atualizar mapa
+                </button>
+              </div>
             </div>
+          </PremiumPanel>
 
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-4">
-              <p className="text-zinc-400 font-bold">
-                Hoje
-              </p>
+          <PremiumPanel>
+            <div className="p-5">
+              <div className="mb-3 flex items-center gap-3">
+                <div className="rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-yellow-400">
+                  <Route size={22} />
+                </div>
 
-              <p className="text-2xl font-black text-yellow-400">
-                {new Date(`${today}T12:00:00`).toLocaleDateString('pt-BR')}
-              </p>
+                <div>
+                  <h2 className="text-xl font-black text-yellow-400">
+                    Rota com paradas
+                  </h2>
 
-              {user?.role === 'DELIVERY' && (
-                <p className="text-sm text-zinc-500 mt-2">
-                  Você está vendo entregas de hoje/atrasadas e retiradas de hoje/atrasadas.
+                  <p className="text-sm font-bold text-zinc-500">
+                    {selectedRouteIds.length}/10 paradas selecionadas
+                  </p>
+                </div>
+              </div>
+
+              {selectedRouteLocations.length > 0 ? (
+                <div className="mb-4 space-y-2">
+                  {selectedRouteLocations.map((location: any, index: number) => (
+                    <div
+                      key={location.id}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-yellow-500/10 bg-black/45 p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-black text-white">
+                          {index + 1}. {location.title}
+                        </p>
+
+                        <p className="text-xs text-zinc-500">
+                          {location.address}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => toggleRouteSelection(location)}
+                        className="rounded-xl border border-red-500/25 bg-red-500/15 p-2 text-red-400 transition hover:bg-red-500 hover:text-white"
+                        title="Remover da rota"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-4 text-sm text-zinc-500">
+                  Marque os quadradinhos nos pedidos/retiradas para montar uma rota.
                 </p>
               )}
-            </div>
 
-            <div className="space-y-3">
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por cliente, telefone ou endereço..."
-                className={inputClass}
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={openSelectedRoute}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 px-4 py-3 font-black text-black shadow-[0_0_30px_rgba(250,204,21,.22)] transition hover:scale-[1.01] disabled:opacity-50"
+                  disabled={selectedRouteLocations.length === 0}
+                >
+                  <Navigation size={18} />
+                  Criar rota
+                </button>
 
-              <select
-                value={typeFilter}
-                onChange={(event) => setTypeFilter(event.target.value)}
-                className={inputClass}
-              >
-                <option value="">Pedidos e retiradas</option>
-                <option value="ORDER">Somente pedidos</option>
-                <option value="WITHDRAWAL">Somente retiradas</option>
-              </select>
-
-              <button
-                onClick={loadData}
-                className="w-full bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold flex items-center justify-center gap-2"
-              >
-                <RefreshCcw size={18} />
-                Atualizar mapa
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <Route size={22} className="text-yellow-400" />
-
-              <div>
-                <h2 className="text-xl font-black text-yellow-400">
-                  Rota com paradas
-                </h2>
-
-                <p className="text-zinc-500 text-sm font-bold">
-                  {selectedRouteIds.length}/10 paradas selecionadas
-                </p>
+                <button
+                  onClick={clearRouteSelection}
+                  className="rounded-2xl border border-yellow-500/15 bg-black/45 px-4 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                >
+                  Limpar
+                </button>
               </div>
             </div>
+          </PremiumPanel>
 
-            {selectedRouteLocations.length > 0 ? (
-              <div className="space-y-2 mb-4">
-                {selectedRouteLocations.map((location: any, index: number) => (
-                  <div
-                    key={location.id}
-                    className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3 flex items-center justify-between gap-3"
-                  >
-                    <div>
-                      <p className="text-sm font-black">
-                        {index + 1}. {location.title}
-                      </p>
-
-                      <p className="text-xs text-zinc-500">
-                        {location.address}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => toggleRouteSelection(location)}
-                      className="bg-red-500/20 text-red-400 rounded-xl p-2"
-                      title="Remover da rota"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-zinc-500 text-sm mb-4">
-                Marque os quadradinhos nos pedidos/retiradas para montar uma rota.
-              </p>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={openSelectedRoute}
-                className="bg-yellow-400 text-black rounded-2xl px-4 py-3 font-black flex items-center justify-center gap-2 disabled:opacity-50"
-                disabled={selectedRouteLocations.length === 0}
-              >
-                <Navigation size={18} />
-                Criar rota
-              </button>
-
-              <button
-                onClick={clearRouteSelection}
-                className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-4 py-3 font-bold"
-              >
-                Limpar
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-            <div className="p-5 border-b border-zinc-800">
-              <p className="text-zinc-400 font-bold">
+          <PremiumPanel>
+            <div className="border-b border-yellow-500/15 p-5">
+              <p className="font-bold text-zinc-400">
                 {filteredLocations.length} rota(s) de hoje
               </p>
             </div>
 
-            <div className="max-h-[540px] overflow-y-auto">
+            <div className="max-h-[540px] overflow-y-auto custom-scrollbar">
               {filteredLocations.map((location) => {
                 const config = getTypeConfig(location.type);
                 const Icon = config.icon;
@@ -682,10 +763,10 @@ export default function MapPage() {
                 return (
                   <div
                     key={location.id}
-                    className={`w-full text-left p-5 border-b border-zinc-800 transition ${
+                    className={`w-full border-b border-yellow-500/10 p-5 text-left transition ${
                       active
                         ? 'bg-yellow-400 text-black'
-                        : 'hover:bg-zinc-800'
+                        : 'hover:bg-yellow-400/[0.035]'
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -694,14 +775,14 @@ export default function MapPage() {
                           event.stopPropagation();
                           toggleRouteSelection(location);
                         }}
-                        className={`mt-1 w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 ${
+                        className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 font-black ${
                           selectedInRoute
                             ? active
-                              ? 'bg-black border-black text-yellow-400'
-                              : 'bg-yellow-400 border-yellow-400 text-black'
+                              ? 'border-black bg-black text-yellow-400'
+                              : 'border-yellow-400 bg-yellow-400 text-black'
                             : active
-                            ? 'border-black text-transparent'
-                            : 'border-zinc-600 text-transparent'
+                              ? 'border-black text-transparent'
+                              : 'border-zinc-600 text-transparent'
                         }`}
                         title="Selecionar para rota"
                       >
@@ -714,7 +795,7 @@ export default function MapPage() {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="font-black text-lg">
+                            <p className="text-lg font-black">
                               {location.title}
                             </p>
 
@@ -724,9 +805,9 @@ export default function MapPage() {
                           </div>
 
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${
+                            className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-black ${
                               active
-                                ? 'bg-black/20 text-black'
+                                ? 'border-black/15 bg-black/15 text-black'
                                 : config.className
                             }`}
                           >
@@ -768,119 +849,122 @@ export default function MapPage() {
                 </div>
               )}
             </div>
-          </div>
+          </PremiumPanel>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden min-h-[720px]">
-          {selectedLocation ? (
-            <>
-              <div className="p-6 border-b border-zinc-800">
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <MapPin size={24} className="text-yellow-400" />
+        <PremiumPanel>
+          <div className="min-h-[720px] overflow-hidden">
+            {selectedLocation ? (
+              <>
+                <div className="border-b border-yellow-500/15 p-6">
+                  <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <MapPin size={24} className="text-yellow-400" />
 
-                      <h2 className="text-2xl font-black">
-                        {selectedLocation.title}
-                      </h2>
+                        <h2 className="text-2xl font-black text-white">
+                          {selectedLocation.title}
+                        </h2>
+                      </div>
+
+                      <p className="font-bold text-zinc-400">
+                        {selectedLocation.address}
+                      </p>
+
+                      {selectedLocation.phone && (
+                        <p className="mt-1 flex items-center gap-2 text-zinc-500">
+                          <Phone size={16} className="text-yellow-400" />
+                          {selectedLocation.phone}
+                        </p>
+                      )}
+
+                      {selectedLocation.type === 'ORDER' && selectedLocation.isLate && (
+                        <p className="mt-2 flex items-center gap-2 font-black text-red-400">
+                          <AlertTriangle size={18} />
+                          Pedido atrasado desde {formatDate(selectedLocation.date)}
+                        </p>
+                      )}
+
+                      {selectedLocation.item && (
+                        <p className="mt-2 font-bold text-green-400">
+                          Buscar: {selectedLocation.item}
+                        </p>
+                      )}
+
+                      {selectedLocation.type === 'WITHDRAWAL' && selectedLocation.isLate && (
+                        <p className="mt-2 flex items-center gap-2 font-black text-red-400">
+                          <AlertTriangle size={18} />
+                          Retirada atrasada desde {formatDate(selectedLocation.pickupDate)}
+                        </p>
+                      )}
                     </div>
 
-                    <p className="text-zinc-400 font-bold">
-                      {selectedLocation.address}
-                    </p>
-
-                    {selectedLocation.phone && (
-                      <p className="text-zinc-500 mt-1">
-                        Telefone: {selectedLocation.phone}
-                      </p>
-                    )}
-
-                    {selectedLocation.type === 'ORDER' && selectedLocation.isLate && (
-                      <p className="text-red-400 font-black mt-2 flex items-center gap-2">
-                        <AlertTriangle size={18} />
-                        Pedido atrasado desde {formatDate(selectedLocation.date)}
-                      </p>
-                    )}
-
-                    {selectedLocation.item && (
-                      <p className="text-green-400 font-bold mt-2">
-                        Buscar: {selectedLocation.item}
-                      </p>
-                    )}
-
-                    {selectedLocation.isLate && (
-                      <p className="text-red-400 font-black mt-2 flex items-center gap-2">
-                        <AlertTriangle size={18} />
-                        Retirada atrasada desde {formatDate(selectedLocation.pickupDate)}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <a
-                      href={getMapsUrl(activeAddress)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="bg-yellow-400 text-black rounded-2xl px-5 py-3 font-black flex items-center gap-2"
-                    >
-                      <Navigation size={18} />
-                      Google Maps
-                    </a>
-
-                    <a
-                      href={getWazeUrl(activeAddress)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="bg-blue-500 text-white rounded-2xl px-5 py-3 font-black flex items-center gap-2"
-                    >
-                      <Navigation size={18} />
-                      Waze
-                    </a>
-
-                    <button
-                      onClick={() => copyAddress(activeAddress)}
-                      className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold flex items-center gap-2"
-                    >
-                      <Copy size={18} />
-                      Copiar
-                    </button>
-
-                    {selectedLocation.type === 'WITHDRAWAL' && (
-                      <button
-                        onClick={() => openWithdrawalNote(selectedLocation)}
-                        className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-5 py-3 font-bold flex items-center gap-2"
+                    <div className="flex flex-wrap gap-3">
+                      <a
+                        href={getMapsUrl(activeAddress)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 px-5 py-3 font-black text-black shadow-[0_0_30px_rgba(250,204,21,.22)]"
                       >
-                        <FileText size={18} />
-                        Nota
-                      </button>
-                    )}
+                        <Navigation size={18} />
+                        Google Maps
+                      </a>
 
-                    {selectedLocation.type === 'WITHDRAWAL' && (
-                      <button
-                        onClick={() => confirmWithdrawalFromMap(selectedLocation)}
-                        className="bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-white rounded-2xl px-5 py-3 font-black flex items-center gap-2"
+                      <a
+                        href={getWazeUrl(activeAddress)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 rounded-2xl bg-blue-500 px-5 py-3 font-black text-white transition hover:bg-blue-400"
                       >
-                        <CheckCircle size={18} />
-                        OK Retirada
+                        <Navigation size={18} />
+                        Waze
+                      </a>
+
+                      <button
+                        onClick={() => copyAddress(activeAddress)}
+                        className="flex items-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                      >
+                        <Copy size={18} />
+                        Copiar
                       </button>
-                    )}
+
+                      {selectedLocation.type === 'WITHDRAWAL' && (
+                        <button
+                          onClick={() => openWithdrawalNote(selectedLocation)}
+                          className="flex items-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                        >
+                          <FileText size={18} />
+                          Nota
+                        </button>
+                      )}
+
+                      {selectedLocation.type === 'WITHDRAWAL' && (
+                        <button
+                          onClick={() => confirmWithdrawalFromMap(selectedLocation)}
+                          className="flex items-center gap-2 rounded-2xl border border-green-500/25 bg-green-500/15 px-5 py-3 font-black text-green-400 transition hover:bg-green-500 hover:text-white"
+                        >
+                          <CheckCircle size={18} />
+                          OK Retirada
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <iframe
-                title="Mapa RJ Chopp"
-                src={getEmbedUrl(activeAddress)}
-                className="w-full h-[620px] bg-zinc-950"
-                loading="lazy"
-              />
-            </>
-          ) : (
-            <div className="h-full min-h-[720px] flex items-center justify-center text-zinc-500">
-              Nenhuma rota de hoje encontrada.
-            </div>
-          )}
-        </div>
+                <iframe
+                  title="Mapa RJ Chopp"
+                  src={getEmbedUrl(activeAddress)}
+                  className="h-[620px] w-full bg-zinc-950"
+                  loading="lazy"
+                />
+              </>
+            ) : (
+              <div className="flex min-h-[720px] items-center justify-center text-zinc-500">
+                Nenhuma rota de hoje encontrada.
+              </div>
+            )}
+          </div>
+        </PremiumPanel>
       </div>
     </Layout>
   );

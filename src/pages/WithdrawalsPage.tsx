@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, CheckCircle, AlertTriangle, CalendarDays } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  CheckCircle,
+  AlertTriangle,
+  CalendarDays,
+  Search,
+  X,
+  Truck,
+  Phone,
+  MapPin,
+  Package,
+  RotateCcw,
+} from 'lucide-react';
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
@@ -8,9 +21,21 @@ import { addAuditLog } from '../services/audit';
 import { addOfflineAction, isOnline } from '../services/offline';
 
 const inputClass =
-  'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
+  'w-full bg-black/55 border border-yellow-500/20 rounded-2xl px-4 py-3 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-black/70 focus:shadow-[0_0_28px_rgba(250,204,21,.14)]';
 
 const STORAGE_KEY = 'rjchopp_withdrawals';
+
+function Field({ label, children }: any) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-black text-yellow-200">
+        {label}
+      </label>
+
+      {children}
+    </div>
+  );
+}
 
 function formatDate(value: any) {
   if (!value) {
@@ -40,6 +65,19 @@ function isToday(date: string, status: string) {
   }
 
   return date === getToday();
+}
+
+function PremiumPanel({ children }: any) {
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/50 shadow-[0_0_38px_rgba(245,158,11,.08)] backdrop-blur-xl">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,.10),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.05),transparent_38%,rgba(250,204,21,.035))]" />
+      <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+
+      <div className="relative">
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export default function WithdrawalsPage() {
@@ -258,14 +296,16 @@ export default function WithdrawalsPage() {
     <Layout>
       <PageHeader
         title="Retiradas"
-        description="Controle de cascos, barris e chopeiras para buscar"
+        description="Controle de cascos, barris, cilindros e chopeiras para buscar."
       />
 
       {late.length > 0 && (
-        <div className="bg-red-500/20 border border-red-500/40 rounded-3xl p-6 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="relative mb-8 overflow-hidden rounded-[2rem] border border-red-500/35 bg-red-500/12 p-6 backdrop-blur-xl">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,.18),transparent_35%)]" />
+
+          <div className="relative flex flex-col justify-between gap-5 md:flex-row md:items-center">
             <div className="flex items-center gap-4">
-              <div className="bg-red-500 text-white rounded-2xl p-4">
+              <div className="rounded-2xl bg-red-500 p-4 text-white shadow-[0_0_35px_rgba(239,68,68,.20)]">
                 <AlertTriangle size={32} />
               </div>
 
@@ -274,7 +314,7 @@ export default function WithdrawalsPage() {
                   {late.length} retirada(s) atrasada(s)
                 </h2>
 
-                <p className="text-zinc-300 font-bold">
+                <p className="font-bold text-zinc-300">
                   Priorize essas buscas antes das próximas entregas.
                 </p>
               </div>
@@ -282,7 +322,7 @@ export default function WithdrawalsPage() {
 
             <button
               onClick={() => setStatusFilter('ATRASADO')}
-              className="bg-red-500 text-white rounded-2xl px-6 py-3 font-black"
+              className="rounded-2xl bg-red-500 px-6 py-3 font-black text-white transition hover:bg-red-400"
             >
               Ver atrasadas
             </button>
@@ -290,20 +330,27 @@ export default function WithdrawalsPage() {
         </div>
       )}
 
-      <div className="grid md:grid-cols-4 gap-6 mb-8">
+      <div className="mb-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <Card title="Pendentes" value={pending.length} />
         <Card title="Buscar hoje" value={today.length} />
         <Card title="Atrasadas" value={late.length} />
         <Card title="Retiradas feitas" value={finished.length} />
       </div>
 
-      <div className="grid md:grid-cols-[1fr_220px_auto] gap-4 mb-8">
-        <input
-          placeholder="Pesquisar por cliente, telefone, endereço ou item..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className={inputClass}
-        />
+      <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_220px_auto]">
+        <div className="relative">
+          <Search
+            size={20}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400"
+          />
+
+          <input
+            placeholder="Pesquisar por cliente, telefone, endereço ou item..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className={`${inputClass} pl-12`}
+          />
+        </div>
 
         <select
           value={statusFilter}
@@ -319,209 +366,272 @@ export default function WithdrawalsPage() {
 
         <button
           onClick={() => setShowModal(true)}
-          className="bg-yellow-400 text-black rounded-2xl px-6 py-3 font-black flex items-center justify-center gap-2"
+          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 px-6 py-3 font-black text-black shadow-[0_0_30px_rgba(250,204,21,.22)] transition hover:scale-[1.01] hover:shadow-[0_0_45px_rgba(250,204,21,.35)]"
         >
           <Plus size={20} />
           Nova Retirada
         </button>
       </div>
 
-      <div className="bg-zinc-900 rounded-3xl border border-zinc-800 overflow-x-auto">
-        <table className="w-full min-w-[1100px]">
-          <thead className="bg-black">
-            <tr className="text-left text-zinc-400">
-              <th className="p-5">Cliente</th>
-              <th className="p-5">Telefone</th>
-              <th className="p-5">Endereço</th>
-              <th className="p-5">Item</th>
-              <th className="p-5">Entrega</th>
-              <th className="p-5">Buscar</th>
-              <th className="p-5">Status</th>
-              <th className="p-5">Ações</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {filteredWithdrawals.map((item) => (
-              <tr
-                key={item.id}
-                className={`border-t border-zinc-800 ${
-                  isLate(item.pickupDate, item.status)
-                    ? 'bg-red-500/10'
-                    : ''
-                }`}
-              >
-                <td className="p-5 font-bold">
-                  {item.client}
-                </td>
-
-                <td className="p-5 text-zinc-400">
-                  {item.phone || '-'}
-                </td>
-
-                <td className="p-5 text-zinc-400">
-                  {item.address || '-'}
-                </td>
-
-                <td className="p-5 text-zinc-300 font-bold">
-                  {item.item}
-                  {item.observation && (
-                    <p className="text-xs text-zinc-500 mt-1">
-                      {item.observation}
-                    </p>
-                  )}
-                </td>
-
-                <td className="p-5 text-zinc-400">
-                  {formatDate(item.deliveryDate)}
-                </td>
-
-                <td className="p-5 text-zinc-400">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays size={17} className="text-yellow-400" />
-                    {formatDate(item.pickupDate)}
-                  </div>
-                </td>
-
-                <td className="p-5">
-                  {item.status === 'RETIRADO' ? (
-                    <span className="bg-green-500/20 text-green-400 px-4 py-2 rounded-full text-sm font-bold">
-                      Retirado
-                    </span>
-                  ) : isLate(item.pickupDate, item.status) ? (
-                    <span className="bg-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-bold inline-flex items-center gap-2">
-                      <AlertTriangle size={15} />
-                      Atrasado
-                    </span>
-                  ) : isToday(item.pickupDate, item.status) ? (
-                    <span className="bg-yellow-500/20 text-yellow-400 px-4 py-2 rounded-full text-sm font-bold">
-                      Buscar hoje
-                    </span>
-                  ) : (
-                    <span className="bg-zinc-700/60 text-zinc-300 px-4 py-2 rounded-full text-sm font-bold">
-                      Pendente
-                    </span>
-                  )}
-                </td>
-
-                <td className="p-5">
-                  <div className="flex gap-2">
-                    {item.status === 'RETIRADO' ? (
-                      <button
-                        onClick={() => reopenWithdrawal(item.id)}
-                        className="bg-zinc-800 hover:bg-zinc-700 rounded-xl px-4 py-3 font-bold"
-                      >
-                        Reabrir
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => confirmWithdrawal(item.id)}
-                        className="bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-white rounded-xl px-4 py-3 font-bold flex items-center gap-2"
-                      >
-                        <CheckCircle size={18} />
-                        Retirado
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => deleteWithdrawal(item.id)}
-                      className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white p-3 rounded-xl"
-                      title="Apagar retirada"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </td>
+      <PremiumPanel>
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full min-w-[1100px]">
+            <thead>
+              <tr className="border-b border-yellow-500/15 bg-black/45 text-left text-sm font-black uppercase tracking-wide text-zinc-400">
+                <th className="p-5">Cliente</th>
+                <th className="p-5">Telefone</th>
+                <th className="p-5">Endereço</th>
+                <th className="p-5">Item</th>
+                <th className="p-5">Entrega</th>
+                <th className="p-5">Buscar</th>
+                <th className="p-5">Status</th>
+                <th className="p-5">Ações</th>
               </tr>
-            ))}
+            </thead>
 
-            {filteredWithdrawals.length === 0 && (
-              <tr>
-                <td className="p-5 text-zinc-500" colSpan={8}>
-                  Nenhuma retirada cadastrada.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            <tbody>
+              {filteredWithdrawals.map((item) => {
+                const lateItem = isLate(item.pickupDate, item.status);
+                const todayItem = isToday(item.pickupDate, item.status);
+
+                return (
+                  <tr
+                    key={item.id}
+                    className={`border-t border-yellow-500/10 transition hover:bg-yellow-400/[0.035] ${
+                      lateItem ? 'bg-red-500/10' : ''
+                    }`}
+                  >
+                    <td className="p-5">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-1 rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-yellow-400">
+                          <Truck size={18} />
+                        </div>
+
+                        <div>
+                          <p className="font-black text-white">
+                            {item.client}
+                          </p>
+
+                          <p className="mt-1 text-xs text-zinc-500">
+                            ID: {String(item.id || '').slice(0, 8)}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="p-5 text-zinc-400">
+                      <div className="flex items-center gap-2">
+                        <Phone size={16} className="text-yellow-400" />
+                        {item.phone || '-'}
+                      </div>
+                    </td>
+
+                    <td className="p-5 text-zinc-400">
+                      <div className="flex items-center gap-2">
+                        <MapPin size={16} className="text-yellow-400" />
+                        {item.address || '-'}
+                      </div>
+                    </td>
+
+                    <td className="p-5">
+                      <div className="flex items-start gap-2">
+                        <Package size={17} className="mt-1 shrink-0 text-yellow-400" />
+
+                        <div>
+                          <p className="font-black text-zinc-200">
+                            {item.item}
+                          </p>
+
+                          {item.observation && (
+                            <p className="mt-1 text-xs text-zinc-500">
+                              {item.observation}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="p-5 text-zinc-400">
+                      {formatDate(item.deliveryDate)}
+                    </td>
+
+                    <td className="p-5 text-zinc-400">
+                      <div className="flex items-center gap-2">
+                        <CalendarDays size={17} className="text-yellow-400" />
+                        {formatDate(item.pickupDate)}
+                      </div>
+                    </td>
+
+                    <td className="p-5">
+                      {item.status === 'RETIRADO' ? (
+                        <span className="inline-flex items-center gap-2 rounded-full border border-green-500/25 bg-green-500/15 px-4 py-2 text-sm font-black text-green-400">
+                          <CheckCircle size={16} />
+                          Retirado
+                        </span>
+                      ) : lateItem ? (
+                        <span className="inline-flex items-center gap-2 rounded-full border border-red-500/25 bg-red-500/15 px-4 py-2 text-sm font-black text-red-400">
+                          <AlertTriangle size={15} />
+                          Atrasado
+                        </span>
+                      ) : todayItem ? (
+                        <span className="inline-flex items-center gap-2 rounded-full border border-yellow-500/25 bg-yellow-500/15 px-4 py-2 text-sm font-black text-yellow-400">
+                          <CalendarDays size={15} />
+                          Buscar hoje
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full border border-zinc-500/20 bg-zinc-700/30 px-4 py-2 text-sm font-black text-zinc-300">
+                          Pendente
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-5">
+                      <div className="flex gap-2">
+                        {item.status === 'RETIRADO' ? (
+                          <button
+                            onClick={() => reopenWithdrawal(item.id)}
+                            className="flex items-center gap-2 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-3 font-black text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+                          >
+                            <RotateCcw size={18} />
+                            Reabrir
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => confirmWithdrawal(item.id)}
+                            className="flex items-center gap-2 rounded-xl border border-green-500/25 bg-green-500/15 px-4 py-3 font-black text-green-400 transition hover:bg-green-500 hover:text-white"
+                          >
+                            <CheckCircle size={18} />
+                            Retirado
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => deleteWithdrawal(item.id)}
+                          className="rounded-xl border border-red-500/25 bg-red-500/15 p-3 text-red-400 transition hover:bg-red-500 hover:text-white"
+                          title="Apagar retirada"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {filteredWithdrawals.length === 0 && (
+                <tr>
+                  <td className="p-6 text-zinc-500" colSpan={8}>
+                    Nenhuma retirada cadastrada.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </PremiumPanel>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
-            <h2 className="text-3xl font-black text-yellow-400 mb-6">
-              Nova Retirada
-            </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-yellow-500/20 bg-black/90 p-8 shadow-[0_0_70px_rgba(245,158,11,.20)] custom-scrollbar">
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(250,204,21,.13),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.06),transparent_38%,rgba(250,204,21,.04))]" />
 
-            <form onSubmit={saveWithdrawal} className="space-y-4">
-              <input
-                name="client"
-                placeholder="Nome do cliente"
-                className={inputClass}
-              />
-
-              <input
-                name="phone"
-                placeholder="Telefone do cliente"
-                className={inputClass}
-              />
-
-              <input
-                name="address"
-                placeholder="Endereço para buscar"
-                className={inputClass}
-              />
-
-              <input
-                name="item"
-                placeholder="O que precisa buscar? Ex: 1 chopeira, 2 barris, cascos..."
-                className={inputClass}
-              />
-
-              <div className="grid md:grid-cols-2 gap-4">
+            <div className="relative">
+              <div className="mb-6 flex items-start justify-between gap-4">
                 <div>
-                  <label className="block mb-2 text-sm font-bold text-zinc-300">
-                    Data da entrega
-                  </label>
+                  <p className="mb-2 text-xs font-black uppercase tracking-[0.35em] text-yellow-400/80">
+                    Retiradas
+                  </p>
 
-                  <input
-                    name="deliveryDate"
-                    type="date"
-                    className={inputClass}
-                  />
+                  <h2 className="text-3xl font-black text-white">
+                    Nova Retirada
+                  </h2>
+
+                  <p className="mt-2 text-sm font-medium text-zinc-400">
+                    Cadastre manualmente uma retirada para o entregador buscar.
+                  </p>
                 </div>
 
-                <div>
-                  <label className="block mb-2 text-sm font-bold text-zinc-300">
-                    Data para buscar de volta
-                  </label>
-
-                  <input
-                    name="pickupDate"
-                    type="date"
-                    className={inputClass}
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-2xl border border-yellow-500/20 bg-black/45 p-3 text-zinc-300 transition hover:bg-yellow-400 hover:text-black"
+                >
+                  <X size={22} />
+                </button>
               </div>
 
-              <textarea
-                name="observation"
-                placeholder="Observação. Ex: buscar depois das 18h, cliente pediu para ligar antes..."
-                className={`${inputClass} min-h-[110px]`}
-              />
+              <form onSubmit={saveWithdrawal} className="space-y-4">
+                <Field label="Nome do cliente">
+                  <input
+                    name="client"
+                    placeholder="Nome do cliente"
+                    className={inputClass}
+                  />
+                </Field>
 
-              <button className="w-full bg-yellow-400 text-black rounded-2xl py-4 font-black">
-                Salvar Retirada
-              </button>
+                <Field label="Telefone">
+                  <input
+                    name="phone"
+                    placeholder="Telefone do cliente"
+                    className={inputClass}
+                  />
+                </Field>
 
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="w-full bg-zinc-800 rounded-2xl py-4 font-bold"
-              >
-                Cancelar
-              </button>
-            </form>
+                <Field label="Endereço">
+                  <input
+                    name="address"
+                    placeholder="Endereço para buscar"
+                    className={inputClass}
+                  />
+                </Field>
+
+                <Field label="Itens para buscar">
+                  <input
+                    name="item"
+                    placeholder="Ex: 1 chopeira, 2 barris, cascos..."
+                    className={inputClass}
+                  />
+                </Field>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Data da entrega">
+                    <input
+                      name="deliveryDate"
+                      type="date"
+                      className={inputClass}
+                    />
+                  </Field>
+
+                  <Field label="Data para buscar de volta">
+                    <input
+                      name="pickupDate"
+                      type="date"
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Observação">
+                  <textarea
+                    name="observation"
+                    placeholder="Ex: buscar depois das 18h, cliente pediu para ligar antes..."
+                    className={`${inputClass} min-h-[110px] resize-none`}
+                  />
+                </Field>
+
+                <button className="w-full rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 py-4 font-black text-black shadow-[0_0_35px_rgba(250,204,21,.26)] transition hover:scale-[1.01]">
+                  Salvar Retirada
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="w-full rounded-2xl border border-yellow-500/15 bg-black/45 py-4 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                >
+                  Cancelar
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}

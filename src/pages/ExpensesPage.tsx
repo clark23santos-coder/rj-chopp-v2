@@ -1,25 +1,35 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Receipt,
+  Wallet,
+  Search,
+  CalendarDays,
+  X,
+  TrendingDown,
+} from 'lucide-react';
 
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { api } from '../services/api';
 import { addAuditLog } from '../services/audit';
-import {
-  CACHE_FINANCIAL_KEY,
-  OFFLINE_FINANCIAL_KEY,
-  addOfflineAction,
-  cacheItems,
-  getCachedItems,
-  isOnline,
-  markOfflineDeleted,
-  mergeOfflineWithOnline,
-  saveOfflineItem,
-} from '../services/offline';
 
 const inputClass =
-  'w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-white outline-none focus:border-yellow-400';
+  'w-full bg-black/55 border border-yellow-500/20 rounded-2xl px-4 py-3 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-black/70 focus:shadow-[0_0_28px_rgba(250,204,21,.14)]';
+
+function Field({ label, children }: any) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-black text-yellow-200">
+        {label}
+      </label>
+
+      {children}
+    </div>
+  );
+}
 
 function formatMoney(value: any) {
   return new Intl.NumberFormat('pt-BR', {
@@ -36,8 +46,22 @@ function formatDate(value: any) {
   return new Date(value).toLocaleString('pt-BR');
 }
 
+function PremiumPanel({ children }: any) {
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] border border-yellow-500/15 bg-black/50 shadow-[0_0_38px_rgba(245,158,11,.08)] backdrop-blur-xl">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,.10),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.05),transparent_38%,rgba(250,204,21,.035))]" />
+      <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+
+      <div className="relative">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -158,6 +182,15 @@ export default function ExpensesPage() {
     }
   }
 
+  const filteredExpenses = expenses.filter((expense) => {
+    const text = search.toLowerCase();
+
+    return (
+      expense.description?.toLowerCase().includes(text) ||
+      expense.category?.toLowerCase().includes(text)
+    );
+  });
+
   const totalExpenses = useMemo(() => {
     return expenses.reduce(
       (total, item) => total + Number(item.amount || 0),
@@ -165,14 +198,26 @@ export default function ExpensesPage() {
     );
   }, [expenses]);
 
+  const biggestExpense = useMemo(() => {
+    return expenses.reduce((biggest, item) => {
+      if (!biggest) {
+        return item;
+      }
+
+      return Number(item.amount || 0) > Number(biggest.amount || 0)
+        ? item
+        : biggest;
+    }, null);
+  }, [expenses]);
+
   return (
     <Layout>
       <PageHeader
         title="Despesas"
-        description="Controle de gastos extras da RJ Chopp"
+        description="Controle dos gastos extras, manutenção, compras e custos operacionais da RJ Chopp."
       />
 
-      <div className="grid md:grid-cols-2 gap-6 mb-8">
+      <div className="mb-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <Card
           title="Total de Despesas"
           value={formatMoney(totalExpenses)}
@@ -182,116 +227,192 @@ export default function ExpensesPage() {
           title="Quantidade"
           value={expenses.length}
         />
+
+        <Card
+          title="Resultado da busca"
+          value={filteredExpenses.length}
+        />
+
+        <Card
+          title="Maior despesa"
+          value={biggestExpense ? formatMoney(biggestExpense.amount) : 'R$ 0,00'}
+        />
       </div>
 
-      <div className="flex justify-end mb-8">
+      <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_auto]">
+        <div className="relative">
+          <Search
+            size={20}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400"
+          />
+
+          <input
+            placeholder="Pesquisar por despesa ou categoria..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className={`${inputClass} pl-12`}
+          />
+        </div>
+
         <button
           onClick={() => setShowModal(true)}
-          className="bg-yellow-400 text-black rounded-2xl px-6 py-3 font-black flex items-center gap-2"
+          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 px-6 py-3 font-black text-black shadow-[0_0_30px_rgba(250,204,21,.22)] transition hover:scale-[1.01] hover:shadow-[0_0_45px_rgba(250,204,21,.35)]"
         >
           <Plus size={20} />
           Adicionar Despesa
         </button>
       </div>
 
-      <div className="bg-zinc-900 rounded-3xl border border-zinc-800 overflow-x-auto">
-        <table className="w-full min-w-[850px]">
-          <thead className="bg-black">
-            <tr className="text-left text-zinc-400">
-              <th className="p-5">O que foi gasto</th>
-              <th className="p-5">Categoria</th>
-              <th className="p-5">Valor</th>
-              <th className="p-5">Data</th>
-              <th className="p-5">Ações</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {expenses.map((expense) => (
-              <tr key={expense.id} className="border-t border-zinc-800">
-                <td className="p-5 font-bold">
-                  {expense.description}
-                </td>
-
-                <td className="p-5 text-zinc-400">
-                  {expense.category || 'Despesa'}
-                </td>
-
-                <td className="p-5 text-red-400 font-black">
-                  {formatMoney(expense.amount)}
-                </td>
-
-                <td className="p-5 text-zinc-400">
-                  {formatDate(expense.createdAt)}
-                </td>
-
-                <td className="p-5">
-                  <button
-                    onClick={() => deleteExpense(expense)}
-                    className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white p-3 rounded-xl"
-                    title="Apagar despesa"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </td>
+      <PremiumPanel>
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full min-w-[850px]">
+            <thead>
+              <tr className="border-b border-yellow-500/15 bg-black/45 text-left text-sm font-black uppercase tracking-wide text-zinc-400">
+                <th className="p-5">O que foi gasto</th>
+                <th className="p-5">Categoria</th>
+                <th className="p-5">Valor</th>
+                <th className="p-5">Data</th>
+                <th className="p-5">Ações</th>
               </tr>
-            ))}
+            </thead>
 
-            {expenses.length === 0 && (
-              <tr>
-                <td className="p-5 text-zinc-500" colSpan={5}>
-                  Nenhuma despesa cadastrada.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            <tbody>
+              {filteredExpenses.map((expense) => (
+                <tr
+                  key={expense.id}
+                  className="border-t border-yellow-500/10 transition hover:bg-yellow-400/[0.035]"
+                >
+                  <td className="p-5">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-1 rounded-2xl border border-red-500/25 bg-red-500/15 p-3 text-red-400">
+                        <Receipt size={20} />
+                      </div>
+
+                      <div>
+                        <p className="font-black text-white">
+                          {expense.description}
+                        </p>
+
+                        <p className="mt-1 text-xs font-medium text-zinc-500">
+                          ID: {String(expense.id || '').slice(0, 8)}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="p-5 text-zinc-400">
+                    {expense.category || 'Despesa'}
+                  </td>
+
+                  <td className="p-5 font-black text-red-400">
+                    {formatMoney(expense.amount)}
+                  </td>
+
+                  <td className="p-5 text-zinc-400">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays size={16} className="text-yellow-400" />
+                      {formatDate(expense.createdAt)}
+                    </div>
+                  </td>
+
+                  <td className="p-5">
+                    <button
+                      onClick={() => deleteExpense(expense)}
+                      className="rounded-xl border border-red-500/25 bg-red-500/15 p-3 text-red-400 transition hover:bg-red-500 hover:text-white"
+                      title="Apagar despesa"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {filteredExpenses.length === 0 && (
+                <tr>
+                  <td className="p-6 text-zinc-500" colSpan={5}>
+                    Nenhuma despesa encontrada.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </PremiumPanel>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
-            <h2 className="text-3xl font-black text-yellow-400 mb-6">
-              Adicionar Despesa
-            </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-yellow-500/20 bg-black/90 p-8 shadow-[0_0_70px_rgba(245,158,11,.20)] custom-scrollbar">
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(250,204,21,.13),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.06),transparent_38%,rgba(250,204,21,.04))]" />
 
-            <form onSubmit={saveExpense} className="space-y-4">
-              <input
-                name="description"
-                placeholder="O que foi gasto? Ex: gasolina, conserto..."
-                className={inputClass}
-              />
+            <div className="relative">
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <p className="mb-2 text-xs font-black uppercase tracking-[0.35em] text-yellow-400/80">
+                    Despesas
+                  </p>
 
-              <input
-                name="category"
-                placeholder="Categoria. Ex: Entrega, manutenção, compra..."
-                defaultValue="Despesa"
-                className={inputClass}
-              />
+                  <h2 className="text-3xl font-black text-white">
+                    Adicionar Despesa
+                  </h2>
 
-              <input
-                name="amount"
-                type="number"
-                step="0.01"
-                placeholder="Quanto foi gasto?"
-                className={inputClass}
-              />
+                  <p className="mt-2 text-sm font-medium text-zinc-400">
+                    Registre qualquer gasto extra da operação.
+                  </p>
+                </div>
 
-              <button
-                disabled={loading}
-                className="w-full bg-yellow-400 text-black rounded-2xl py-4 font-black disabled:opacity-50"
-              >
-                {loading ? 'Salvando...' : 'Salvar Despesa'}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-2xl border border-yellow-500/20 bg-black/45 p-3 text-zinc-300 transition hover:bg-yellow-400 hover:text-black"
+                >
+                  <X size={22} />
+                </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="w-full bg-zinc-800 rounded-2xl py-4 font-bold"
-              >
-                Cancelar
-              </button>
-            </form>
+              <form onSubmit={saveExpense} className="space-y-4">
+                <Field label="O que foi gasto?">
+                  <input
+                    name="description"
+                    placeholder="Ex: gasolina, conserto, manutenção..."
+                    className={inputClass}
+                  />
+                </Field>
+
+                <Field label="Categoria">
+                  <input
+                    name="category"
+                    placeholder="Ex: Entrega, manutenção, compra..."
+                    defaultValue="Despesa"
+                    className={inputClass}
+                  />
+                </Field>
+
+                <Field label="Valor gasto">
+                  <input
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    placeholder="Quanto foi gasto?"
+                    className={inputClass}
+                  />
+                </Field>
+
+                <button
+                  disabled={loading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 py-4 font-black text-black shadow-[0_0_35px_rgba(250,204,21,.26)] transition hover:scale-[1.01] disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Salvar Despesa'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="w-full rounded-2xl border border-yellow-500/15 bg-black/45 py-4 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+                >
+                  Cancelar
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
