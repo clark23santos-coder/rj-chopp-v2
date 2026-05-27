@@ -489,7 +489,6 @@ export default function OrdersPage() {
       order.status?.toLowerCase().includes(text) ||
       meta.returnItems?.toLowerCase().includes(text);
 
-    const deliveredAndWaitingPickup = orderStatus === 'APPROVED';
     const futureScheduledOrder = isFutureScheduledOrder(order, meta, today);
     const scheduledForToday = isScheduledForToday(order, meta, today);
     const lateScheduledOrder = isLateScheduledOrder(order, meta, today);
@@ -508,16 +507,6 @@ export default function OrdersPage() {
         String(order.paymentMethod || '').toUpperCase() === paymentFilter;
 
       return matchesSearch && matchesPayment && lateScheduledOrder;
-    }
-
-    const shouldHideDeliveredFromOrders =
-      !statusFilter &&
-      !returnFilter &&
-      !text &&
-      deliveredAndWaitingPickup;
-
-    if (shouldHideDeliveredFromOrders) {
-      return false;
     }
 
     const shouldHideFutureScheduledFromOpenOrders =
@@ -1426,7 +1415,7 @@ export default function OrdersPage() {
             onChange={(event) => setStatusFilter(event.target.value)}
             className={inputClass}
           >
-            <option value="">Pedidos em aberto</option>
+            <option value="">Todos os pedidos</option>
             <option value="AGENDADO">Pedidos agendados</option>
             <option value="ATRASADO">Pedidos atrasados</option>
             <option value="PENDING">Pendente</option>
