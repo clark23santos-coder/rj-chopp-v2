@@ -25,10 +25,17 @@ import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
 import { addAuditLog } from '../services/audit';
 import {
+  CACHE_CLIENTS_KEY,
+  CACHE_ORDERS_KEY,
+  CACHE_PRODUCTS_KEY,
+  OFFLINE_ORDERS_KEY,
   addOfflineAction,
-  getOfflineOrders,
+  cacheItems,
+  getCachedItems,
   isOnline,
+  mergeOfflineWithOnline,
   saveOfflineOrder,
+  updateOfflineOrder,
 } from '../services/offline';
 
 const inputClass =
@@ -218,14 +225,25 @@ function isAccessoryProduct(product: any) {
   );
 }
 
-function getProductsForOrderSelect(products: any[], selectedProductId: string) {
-  return products.filter((product) => {
-    if (product.id === selectedProductId) {
-      return true;
-    }
+function sortProductsAlphabetically(products: any[]) {
+  return [...products].sort((a, b) => {
+    const nameA = getProductDisplayName(a).toLowerCase();
+    const nameB = getProductDisplayName(b).toLowerCase();
 
-    return !isAccessoryProduct(product);
+    return nameA.localeCompare(nameB, 'pt-BR');
   });
+}
+
+function getProductsForOrderSelect(products: any[], selectedProductId: string) {
+  return sortProductsAlphabetically(
+    products.filter((product) => {
+      if (product.id === selectedProductId) {
+        return true;
+      }
+
+      return !isAccessoryProduct(product);
+    })
+  );
 }
 
 function getProductSearchText(product: any) {
@@ -401,20 +419,22 @@ export default function OrdersPage() {
         ]);
 
       const onlineOrders = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
-      const offlineOrders = getOfflineOrders();
+      const onlineClients = Array.isArray(clientsResponse.data) ? clientsResponse.data : [];
+      const onlineProducts = Array.isArray(productsResponse.data) ? productsResponse.data : [];
 
-      setOrders([
-        ...offlineOrders,
-        ...onlineOrders,
-      ]);
+      cacheItems(CACHE_ORDERS_KEY, onlineOrders);
+      cacheItems(CACHE_CLIENTS_KEY, onlineClients);
+      cacheItems(CACHE_PRODUCTS_KEY, onlineProducts);
 
-      setClients(Array.isArray(clientsResponse.data) ? clientsResponse.data : []);
-      setProducts(Array.isArray(productsResponse.data) ? productsResponse.data : []);
+      setOrders(mergeOfflineWithOnline(OFFLINE_ORDERS_KEY, onlineOrders));
+      setClients(onlineClients);
+      setProducts(onlineProducts);
     } catch (error) {
       console.log('Erro ao carregar pedidos:', error);
-      setOrders(getOfflineOrders());
-      setClients([]);
-      setProducts([]);
+
+      setOrders(mergeOfflineWithOnline(OFFLINE_ORDERS_KEY, getCachedItems(CACHE_ORDERS_KEY)));
+      setClients(getCachedItems(CACHE_CLIENTS_KEY));
+      setProducts(getCachedItems(CACHE_PRODUCTS_KEY));
     }
   }
 
@@ -973,12 +993,18 @@ export default function OrdersPage() {
         getOrderMeta(deliveryOrder.id)
       );
 
-      await updateOrderStatus(deliveryOrder, 'APPROVED', {
-        pickupDate,
-        returnItems,
-        observation,
+      const statusData = {
+        status: 'APPROVED',
+        paymentMethod: deliveryOrder.paymentMethod || '',
+        total: Number(deliveryOrder.total || 0),
+        note: buildOrderNote({
+          deliveryDate: getOrderMeta(deliveryOrder.id)?.deliveryDate || '',
+          pickupDate,
+          returnItems,
+          observation,
+        }),
         discountStockNow: !stockWasAlreadyDiscounted,
-      });
+      };
 
       saveOrderMeta(deliveryOrder.id, {
         pickupDate,
@@ -1015,6 +1041,63 @@ export default function OrdersPage() {
         withdrawalFromOrder,
         ...withoutOldSameOrder,
       ]);
+
+      if (!isOnline()) {
+        updateOfflineOrder(deliveryOrder.id, {
+          ...deliveryOrder,
+          ...statusData,
+          offlinePending: true,
+          offlineAction: 'DELIVERED',
+        });
+
+        addOfflineAction({
+          type: 'UPDATE_ORDER',
+          title: `Pedido entregue offline: ${deliveryOrder.client?.name || 'Cliente não informado'}`,
+          payload: {
+            id: deliveryOrder.id,
+            data: statusData,
+            config: authHeaders(),
+          },
+        });
+
+        addOfflineAction({
+          type: 'CREATE_WITHDRAWAL',
+          title: `Retirada criada offline pelo pedido: ${deliveryOrder.client?.name || 'Cliente não informado'}`,
+          payload: withdrawalFromOrder,
+        });
+
+        setOrders((current) =>
+          current.map((item) =>
+            item.id === deliveryOrder.id
+              ? {
+                  ...item,
+                  ...statusData,
+                  offlinePending: true,
+                  offlineAction: 'DELIVERED',
+                }
+              : item
+          )
+        );
+
+        setDeliveryOrder(null);
+
+        addAuditLog({
+          area: 'Pedidos',
+          action: 'DELIVERED',
+          title: `Pedido entregue offline: ${deliveryOrder.client?.name || 'Cliente não informado'}`,
+          description: `Retirada agendada para ${formatDate(pickupDate)}\nItens para buscar: ${returnItems}\nSerá sincronizado quando a internet voltar.`,
+        });
+
+        alert('Pedido marcado como entregue offline. Quando a internet voltar, o sistema vai sincronizar.');
+        return;
+      }
+
+      await updateOrderStatus(deliveryOrder, 'APPROVED', {
+        pickupDate,
+        returnItems,
+        observation,
+        discountStockNow: !stockWasAlreadyDiscounted,
+      });
 
       setDeliveryOrder(null);
 
@@ -1399,7 +1482,7 @@ export default function OrdersPage() {
                   <th className="p-5">Total</th>
                   <th className="p-5">Status</th>
                   <th className="p-5">Estoque</th>
-                  <th className="p-5">Ações</th>
+                  <th className="sticky right-0 z-20 bg-black/90 p-5 shadow-[-18px_0_30px_rgba(0,0,0,.55)]">Ações</th>
                 </tr>
               </thead>
 
@@ -1536,7 +1619,7 @@ export default function OrdersPage() {
                         )}
                       </td>
 
-                      <td className="p-5">
+                      <td className="sticky right-0 z-10 bg-black/90 p-5 shadow-[-18px_0_30px_rgba(0,0,0,.55)]">
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => setSelectedOrder(order)}

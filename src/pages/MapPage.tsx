@@ -20,7 +20,13 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
 import { addAuditLog } from '../services/audit';
-import { addOfflineAction, isOnline } from '../services/offline';
+import {
+  CACHE_ORDERS_KEY,
+  addOfflineAction,
+  cacheItems,
+  getCachedItems,
+  isOnline,
+} from '../services/offline';
 
 const inputClass =
   'w-full bg-black/55 border border-yellow-500/20 rounded-2xl px-4 py-3 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-black/70 focus:shadow-[0_0_28px_rgba(250,204,21,.14)]';
@@ -288,16 +294,21 @@ export default function MapPage() {
   }
 
   async function loadData() {
+    const withdrawalsData = readStorage(WITHDRAWALS_STORAGE_KEY, []);
+
     try {
       const ordersResponse = await api.get('/orders', authHeaders());
-      const withdrawalsData = readStorage(WITHDRAWALS_STORAGE_KEY, []);
+      const onlineOrders = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
 
-      setOrders(Array.isArray(ordersResponse.data) ? ordersResponse.data : []);
+      cacheItems(CACHE_ORDERS_KEY, onlineOrders);
+
+      setOrders(onlineOrders);
       setWithdrawals(Array.isArray(withdrawalsData) ? withdrawalsData : []);
     } catch (error) {
       console.log('Erro ao carregar mapa:', error);
-      setOrders([]);
-      setWithdrawals([]);
+
+      setOrders(getCachedItems(CACHE_ORDERS_KEY));
+      setWithdrawals(Array.isArray(withdrawalsData) ? withdrawalsData : []);
     }
   }
 
