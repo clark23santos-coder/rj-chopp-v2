@@ -39,6 +39,59 @@ function formatMoney(value: any) {
   }).format(Number(value || 0));
 }
 
+function normalizeText(value: any) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s,.-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getProductSearchText(product: any) {
+  const salePrice = Number(product.salePrice || 0);
+  const costPrice = Number(product.costPrice || 0);
+
+  const fullText = [
+    product.name,
+    product.category,
+    product.brand,
+    product.unit,
+    product.stock,
+    product.minimumStock,
+    product.costPrice,
+    product.salePrice,
+    formatMoney(costPrice),
+    formatMoney(salePrice),
+    salePrice.toFixed(2),
+    salePrice.toFixed(2).replace('.', ','),
+    costPrice.toFixed(2),
+    costPrice.toFixed(2).replace('.', ','),
+  ]
+    .filter((item) => item !== null && item !== undefined && item !== '')
+    .join(' ');
+
+  return normalizeText(fullText);
+}
+
+function productMatchesSearch(product: any, search: string) {
+  const normalizedSearch = normalizeText(search);
+
+  if (!normalizedSearch) {
+    return true;
+  }
+
+  const productText = getProductSearchText(product);
+
+  const searchWords = normalizedSearch
+    .split(' ')
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  return searchWords.every((word) => productText.includes(word));
+}
+
 function PremiumCard({ title, value, icon: Icon, tone = 'yellow' }: any) {
   const toneClass =
     tone === 'red'
@@ -224,13 +277,7 @@ export default function ProductsPage() {
   }
 
   const filteredProducts = products.filter((product) => {
-    const text = search.toLowerCase();
-
-    return (
-      product.name?.toLowerCase().includes(text) ||
-      product.category?.toLowerCase().includes(text) ||
-      product.brand?.toLowerCase().includes(text)
-    );
+    return productMatchesSearch(product, search);
   });
 
   const totals = useMemo(() => {
@@ -282,7 +329,7 @@ export default function ProductsPage() {
           />
 
           <input
-            placeholder="Pesquisar produto, marca ou categoria..."
+            placeholder="Busca inteligente: agua garoto com gas, coca zero, heineken lata..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className={`${inputClass} pl-12`}
