@@ -13,18 +13,65 @@ import {
 } from 'lucide-react';
 
 
-
-type LoginResponse = {
-  token?: string;
-  user?: any;
-  message?: string;
-};
-
 const fieldClass =
   'group flex h-[66px] min-w-0 items-center rounded-2xl border border-yellow-500/25 bg-black/45 px-5 transition duration-300 focus-within:border-yellow-400 focus-within:bg-black/60 focus-within:shadow-[0_0_30px_rgba(250,204,21,.16)]';
 
 const featureClass =
   'group relative overflow-hidden rounded-2xl border border-yellow-500/15 bg-black/30 p-4 text-left shadow-[0_0_24px_rgba(250,204,21,.05)] backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-yellow-400/35 hover:shadow-[0_0_34px_rgba(250,204,21,.13)]';
+
+const REMEMBER_LOGIN_KEY = 'rjchopp_remember_login';
+
+const users = [
+  {
+    username: 'clark',
+    password: '232814',
+    name: 'Clark',
+    role: 'ADMIN',
+    roleLabel: 'Admin',
+  },
+  {
+    username: 'uber',
+    password: '060705',
+    name: 'Uber',
+    role: 'ADMIN',
+    roleLabel: 'Admin',
+  },
+  {
+    username: 'entregador',
+    password: '1234',
+    name: 'Entregador',
+    role: 'DELIVERY',
+    roleLabel: 'Entregador',
+  },
+];
+
+function getHomeByRole(role: string) {
+  if (role === 'DELIVERY') {
+    return '/retiradas';
+  }
+
+  if (role === 'FINANCE') {
+    return '/financeiro';
+  }
+
+  return '/';
+}
+
+function getSavedLogin() {
+  try {
+    const saved = localStorage.getItem(REMEMBER_LOGIN_KEY);
+
+    if (saved) {
+      const parsed = JSON.parse(saved);
+
+      return parsed.username || localStorage.getItem('savedLogin') || '';
+    }
+
+    return getSavedLogin();
+  } catch {
+    return '';
+  }
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -56,91 +103,64 @@ export default function LoginPage() {
     }));
   }, []);
 
-  function getApiBaseUrl() {
-    const hostname = window.location.hostname;
-    const envUrl = import.meta.env.VITE_API_URL;
-
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:3333';
-    }
-
-    if (
-      hostname.startsWith('192.168.') ||
-      hostname.startsWith('10.') ||
-      hostname.startsWith('172.')
-    ) {
-      return `http://${hostname}:3333`;
-    }
-
-    if (envUrl) {
-      return String(envUrl).replace(/\/$/, '');
-    }
-
-    return 'http://localhost:3333';
-  }
-
-  async function handleSubmit(event: FormEvent) {
+  function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    if (!login.trim() || !password.trim()) {
+    const normalizedLogin = login.trim().toLowerCase();
+
+    if (!normalizedLogin || !password.trim()) {
       setError('Preencha usuário e senha.');
       return;
     }
 
-    try {
-      setLoading(true);
-      setError('');
+    setLoading(true);
+    setError('');
 
-      const baseUrl = getApiBaseUrl();
+    const user = users.find((item) => {
+      return (
+        item.username.toLowerCase() === normalizedLogin &&
+        item.password === password
+      );
+    });
 
-      const response = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: login.trim(),
-          password,
-        }),
-      });
-
-      const data: LoginResponse = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
-          data?.message ||
-            data?.message ||
-            'Falha ao entrar'
-        );
-      }
-
-      if (!data?.token) {
-        throw new Error('Login realizado, mas o token não foi recebido.');
-      }
-
-      localStorage.setItem('token', data.token);
-
-      if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
-        localStorage.setItem('rjchopp_user', JSON.stringify(data.user));
-      }
-
-      if (remember) {
-        localStorage.setItem('savedLogin', login.trim());
-      } else {
-        localStorage.removeItem('savedLogin');
-      }
-
-      setShowIntro(true);
-
-      setTimeout(() => {
-        navigate('/');
-      }, 1250);
-    } catch (err: any) {
-      setError(err?.message || 'Não foi possível fazer login');
-    } finally {
+    if (!user) {
       setLoading(false);
+      setError('Usuário ou senha inválidos.');
+      return;
     }
+
+    const userToSave = {
+      id: user.username,
+      name: user.name,
+      email: user.username,
+      username: user.username,
+      role: user.role,
+      roleLabel: user.roleLabel,
+      loggedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem('rjchopp_user', JSON.stringify(userToSave));
+    localStorage.setItem('user', JSON.stringify(userToSave));
+    localStorage.setItem('token', `local-token-${user.username}-${Date.now()}`);
+
+    if (remember) {
+      localStorage.setItem('savedLogin', user.username);
+      localStorage.setItem(
+        REMEMBER_LOGIN_KEY,
+        JSON.stringify({
+          username: user.username,
+        })
+      );
+    } else {
+      localStorage.removeItem('savedLogin');
+      localStorage.removeItem(REMEMBER_LOGIN_KEY);
+    }
+
+    setShowIntro(true);
+
+    window.setTimeout(() => {
+      window.location.href = getHomeByRole(user.role);
+    }, 1250);
   }
 
   return (
