@@ -1,538 +1,477 @@
-import { useEffect, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Beer,
-  CheckCircle,
-  Cloud,
-  Eye,
-  EyeOff,
-  Headphones,
-  Lock,
-  LogIn,
-  ShieldCheck,
-  User,
-} from 'lucide-react';
 
-const REMEMBER_LOGIN_KEY = 'rjchopp_remember_login';
+type LoginResponse = {
+  token?: string;
+  user?: any;
+  message?: string;
+};
 
-const users = [
-  {
-    username: 'clark',
-    password: '232814',
-    name: 'Clark',
-    role: 'ADMIN',
-    roleLabel: 'Admin',
-  },
-  {
-    username: 'uber',
-    password: '060705',
-    name: 'Uber',
-    role: 'ADMIN',
-    roleLabel: 'Admin',
-  },
-  {
-    username: 'entregador',
-    password: '1234',
-    name: 'Entregador',
-    role: 'DELIVERY',
-    roleLabel: 'Entregador',
-  },
-];
-
-function getHomeByRole(role: string) {
-  if (role === 'DELIVERY') return '/retiradas';
-  if (role === 'FINANCE') return '/financeiro';
-
-  return '/';
+function BeerIcon({ className = 'h-6 w-6' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M8 8V18C8 19.1046 8.89543 20 10 20H14C15.1046 20 16 19.1046 16 18V8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16 9H17C18.1046 9 19 9.89543 19 11V13C19 14.1046 18.1046 15 17 15H16"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.5 8C7.11929 8 6 6.88071 6 5.5C6 4.11929 7.11929 3 8.5 3C9.31243 3 10.0343 3.38706 10.4917 3.98764C10.9456 3.38316 11.6672 3 12.5 3C13.3328 3 14.0544 3.38316 14.5083 3.98764C14.9657 3.38706 15.6876 3 16.5 3C17.8807 3 19 4.11929 19 5.5C19 6.88071 17.8807 8 16.5 8H8.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
-function getSavedLogin() {
-  try {
-    const saved = localStorage.getItem(REMEMBER_LOGIN_KEY);
-
-    if (!saved) {
-      return {
-        username: '',
-        remember: false,
-      };
-    }
-
-    const parsed = JSON.parse(saved);
-
-    return {
-      username: parsed.username || '',
-      remember: true,
-    };
-  } catch {
-    return {
-      username: '',
-      remember: false,
-    };
-  }
+function UserIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M5 20C5.73095 16.6158 8.52453 14.5 12 14.5C15.4755 14.5 18.2691 16.6158 19 20"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
-const inputClass =
-  'w-full h-[54px] bg-black/50 border border-yellow-500/30 rounded-xl pl-12 pr-12 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-300 focus:bg-black/75 focus:shadow-[0_0_32px_rgba(250,204,21,0.20)]';
+function LockIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M7 11V8.5C7 5.73858 9.23858 3.5 12 3.5C14.7614 3.5 17 5.73858 17 8.5V11"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <rect
+        x="5"
+        y="11"
+        width="14"
+        height="9"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function EyeIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M2 12C3.8 8.5 7.2 6 12 6C16.8 6 20.2 8.5 22 12C20.2 15.5 16.8 18 12 18C7.2 18 3.8 15.5 2 12Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function EyeOffIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M3 3L21 21"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M10.584 10.587C10.2103 10.9607 10 11.4675 10 12C10 13.1046 10.8954 14 12 14C12.5325 14 13.0393 13.7897 13.413 13.416"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.36395 5.36597C10.2087 5.12576 11.0835 5 12 5C16.8 5 20.2 7.5 22 11C21.4267 12.1145 20.6925 13.1095 19.811 13.953"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6.23999 7.237C4.50404 8.2094 3.07374 9.46285 2 11C3.8 14.5 7.2 17 12 17C13.3747 17 14.6549 16.7952 15.8301 16.417"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ShieldIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M12 3L19 6V11C19 15.4183 16.134 19.2845 12 20.5C7.866 19.2845 5 15.4183 5 11V6L12 3Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CloudIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M7 18H17C19.2091 18 21 16.2091 21 14C21 11.9631 19.4763 10.282 17.5 10.0312C17.1504 7.16507 14.71 5 11.75 5C8.8235 5 6.40557 7.11636 6.02072 9.93427C3.7312 10.3374 2 12.3359 2 14.75C2 16.5449 3.45507 18 5.25 18H7Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function HeadsetIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M4 13V12C4 7.58172 7.58172 4 12 4C16.4183 4 20 7.58172 20 12V13"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <rect x="3" y="12" width="4" height="7" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="17" y="12" width="4" height="7" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M17 19C17 20.1046 16.1046 21 15 21H12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
 
-  const [username, setUsername] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberLogin, setRememberLogin] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    const saved = getSavedLogin();
-
-    setUsername(saved.username);
-    setRememberLogin(saved.remember);
-    setPassword('');
+  const particles = useMemo(() => {
+    return Array.from({ length: 16 }).map((_, index) => ({
+      id: index,
+      left: `${8 + ((index * 19) % 84)}%`,
+      top: `${8 + ((index * 23) % 84)}%`,
+      delay: `${(index % 7) * 0.5}s`,
+      duration: `${4 + (index % 5)}s`,
+      size: `${2 + (index % 3)}px`,
+      opacity: 0.15 + ((index % 4) * 0.08),
+    }));
   }, []);
 
-  function login(event: any) {
-    event.preventDefault();
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
 
-    setLoading(true);
-
-    const user = users.find((item) => {
-      return (
-        item.username.toLowerCase() === username.toLowerCase().trim() &&
-        item.password === password
-      );
-    });
-
-    if (!user) {
-      setLoading(false);
-      alert('Usuário ou senha inválidos.');
+    if (!login || !password) {
+      setError('Preencha usuário e senha');
       return;
     }
 
-    const userToSave = {
-      name: user.name,
-      username: user.username,
-      role: user.role,
-      roleLabel: user.roleLabel,
-      loggedAt: new Date().toISOString(),
-    };
+    setError('');
+    setLoading(true);
 
-    localStorage.setItem('rjchopp_user', JSON.stringify(userToSave));
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
 
-    if (rememberLogin) {
-      localStorage.setItem(
-        REMEMBER_LOGIN_KEY,
-        JSON.stringify({
-          username: user.username,
-        })
-      );
-    } else {
-      localStorage.removeItem(REMEMBER_LOGIN_KEY);
-    }
+      const response = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: login,
+          password,
+        }),
+      });
 
-    setShowIntro(true);
+      const data: LoginResponse = await response.json();
 
-    window.setTimeout(() => {
+      if (!response.ok) {
+        throw new Error(data?.message || 'Falha ao entrar');
+      }
+
+      if (data?.token) {
+        localStorage.setItem('token', data.token);
+      }
+
+      if (data?.user) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('rjchopp_user', JSON.stringify(data.user));
+      }
+
+      if (remember) {
+        localStorage.setItem('savedLogin', login);
+      } else {
+        localStorage.removeItem('savedLogin');
+      }
+
+      setShowIntro(true);
+
+      setTimeout(() => {
+        navigate('/');
+      }, 1300);
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível fazer login');
+    } finally {
       setLoading(false);
-      navigate(getHomeByRole(user.role));
-    }, 1700);
+    }
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black text-white">
-      <style>
-        {`
-          @keyframes bgMove {
-            0%, 100% {
-              transform: scale(1.015) translateX(0);
-              filter: brightness(.88) saturate(1.1);
-            }
-            50% {
-              transform: scale(1.04) translateX(-6px);
-              filter: brightness(1) saturate(1.18);
-            }
-          }
+    <main className="relative min-h-[100dvh] w-screen max-w-[100vw] overflow-hidden bg-black text-white">
+      <div className="pointer-events-none fixed inset-0 w-screen max-w-[100vw] overflow-hidden">
+        <div className="absolute left-[-96px] top-[8%] h-[210px] w-[210px] rounded-full bg-yellow-500/10 blur-3xl sm:left-[-15%] sm:h-[360px] sm:w-[360px]" />
+        <div className="absolute right-[-96px] top-[27%] h-[220px] w-[220px] rounded-full bg-amber-400/10 blur-3xl sm:right-[-10%] sm:h-[420px] sm:w-[420px]" />
+        <div className="absolute bottom-[-80px] left-1/2 h-[220px] w-[220px] -translate-x-1/2 rounded-full bg-yellow-500/10 blur-3xl sm:h-[340px] sm:w-[340px]" />
 
-          @keyframes cardEnter {
-            from {
-              opacity: 0;
-              transform: translateY(28px) scale(.97);
-              filter: blur(8px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-              filter: blur(0);
-            }
-          }
-
-          @keyframes logoIntro {
-            0% {
-              opacity: 0;
-              transform: translateY(22px) scale(.86);
-              filter: blur(12px);
-            }
-            45% {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-              filter: blur(0);
-            }
-            100% {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-              filter: blur(0);
-            }
-          }
-
-          @keyframes introGlow {
-            0% {
-              opacity: 0;
-              transform: scale(.65);
-            }
-            45% {
-              opacity: .95;
-              transform: scale(1);
-            }
-            100% {
-              opacity: .35;
-              transform: scale(1.4);
-            }
-          }
-
-          @keyframes introLine {
-            from {
-              width: 0;
-              opacity: 0;
-            }
-            to {
-              width: 260px;
-              opacity: 1;
-            }
-          }
-
-          @keyframes goldShine {
-            0% {
-              transform: translateX(-130%) skewX(-18deg);
-            }
-            100% {
-              transform: translateX(230%) skewX(-18deg);
-            }
-          }
-
-          @keyframes particleFloat {
-            0% {
-              transform: translateY(40px) translateX(0);
-              opacity: 0;
-            }
-            20% {
-              opacity: .7;
-            }
-            100% {
-              transform: translateY(-110vh) translateX(28px);
-              opacity: 0;
-            }
-          }
-
-          @keyframes cardGlow {
-            0%, 100% {
-              box-shadow:
-                0 0 55px rgba(245, 158, 11, .24),
-                inset 0 0 36px rgba(245, 158, 11, .08);
-            }
-            50% {
-              box-shadow:
-                0 0 95px rgba(245, 158, 11, .40),
-                inset 0 0 54px rgba(245, 158, 11, .12);
-            }
-          }
-
-          @keyframes topLight {
-            0%, 100% {
-              opacity: .45;
-              transform: translateX(-18%);
-            }
-            50% {
-              opacity: .9;
-              transform: translateX(18%);
-            }
-          }
-
-          .background-photo {
-            animation: bgMove 22s ease-in-out infinite;
-          }
-
-          .login-card {
-            animation: cardEnter .85s ease-out both;
-          }
-
-          .card-glow {
-            animation: cardGlow 5s ease-in-out infinite;
-          }
-
-          .gold-button::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            width: 35%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
-            animation: goldShine 4.2s ease-in-out infinite;
-          }
-
-          .gold-particle {
-            position: absolute;
-            bottom: -40px;
-            width: 3px;
-            height: 3px;
-            border-radius: 999px;
-            background: rgba(250,204,21,.78);
-            box-shadow: 0 0 14px rgba(250,204,21,.85);
-            animation: particleFloat linear infinite;
-          }
-
-          .top-light {
-            animation: topLight 8s ease-in-out infinite;
-          }
-
-          .intro-logo {
-            animation: logoIntro 1.25s ease-out both;
-          }
-
-          .intro-glow {
-            animation: introGlow 1.6s ease-out both;
-          }
-
-          .intro-line {
-            animation: introLine .9s ease-out .45s both;
-          }
-
-          @media (max-width: 900px) {
-            .background-photo {
-              animation: none;
-            }
-
-            .desktop-particles {
-              display: none;
-            }
-          }
-        `}
-      </style>
-
-      <div
-        className="background-photo absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage: "url('/login-bg-clean.png')",
-        }}
-      />
-
-      <div className="absolute inset-0 bg-black/18" />
-
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,0,0,.03),rgba(0,0,0,.42)_72%,rgba(0,0,0,.78)_100%),linear-gradient(90deg,rgba(0,0,0,.38),rgba(0,0,0,.04)_45%,rgba(0,0,0,.38))]" />
-
-      <div className="top-light pointer-events-none absolute left-1/2 top-0 h-52 w-[46rem] -translate-x-1/2 rounded-full bg-yellow-400/22 blur-3xl" />
-
-      <div className="desktop-particles pointer-events-none absolute inset-0">
-        {Array.from({ length: 40 }).map((_, index) => (
+        {particles.map((particle) => (
           <span
-            key={index}
-            className="gold-particle"
+            key={particle.id}
+            className="absolute rounded-full bg-yellow-400/70 animate-pulse"
             style={{
-              left: `${(index * 31) % 100}%`,
-              animationDuration: `${8 + (index % 7)}s`,
-              animationDelay: `${index * 0.38}s`,
-              opacity: 0.18 + (index % 5) * 0.12,
+              left: particle.left,
+              top: particle.top,
+              width: particle.size,
+              height: particle.size,
+              opacity: particle.opacity,
+              animationDelay: particle.delay,
+              animationDuration: particle.duration,
             }}
           />
         ))}
       </div>
 
-      <div
-        className={`fixed inset-0 z-50 flex items-center justify-center bg-black transition-all duration-700 ${
-          showIntro ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-      >
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-45 blur-sm"
-          style={{
-            backgroundImage: "url('/login-bg-clean.png')",
-          }}
-        />
+      <section className="relative z-10 flex h-[100dvh] w-screen max-w-[100vw] items-center justify-center overflow-hidden px-3 py-3 sm:min-h-[100dvh] sm:px-6 sm:py-8">
+        <div className="h-full w-full max-w-[520px] overflow-y-auto overflow-x-hidden sm:h-auto sm:overflow-visible">
+          <div className="relative mx-auto w-full max-w-full overflow-hidden rounded-[22px] border border-yellow-500/20 bg-black/75 p-3 shadow-[0_0_52px_rgba(234,179,8,0.14)] backdrop-blur-xl sm:rounded-[30px] sm:p-6 md:p-8">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(234,179,8,0.18),transparent_35%),radial-gradient(circle_at_bottom,rgba(234,179,8,0.10),transparent_30%)]" />
 
-        <div className="absolute inset-0 bg-black/70" />
-
-        <div className="intro-glow absolute h-72 w-72 rounded-full bg-yellow-400/20 blur-3xl" />
-
-        <div className="intro-logo relative text-center">
-          <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full border border-yellow-400/50 bg-yellow-400/10 text-yellow-400 shadow-[0_0_55px_rgba(250,204,21,.35)]">
-            <Beer size={52} />
-          </div>
-
-          <h1 className="text-4xl font-black tracking-[0.24em] text-white sm:text-6xl">
-            RJ CHOPP <span className="text-yellow-400">SGE</span>
-          </h1>
-
-          <div className="intro-line mx-auto mt-6 h-px bg-gradient-to-r from-transparent via-yellow-400 to-transparent" />
-
-          <p className="mt-6 text-sm font-semibold tracking-[0.35em] text-yellow-100/80">
-            ENTRANDO NO SISTEMA
-          </p>
-        </div>
-      </div>
-
-      <section className="relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
-        <div className="login-card w-full max-w-[720px]">
-          <div className="card-glow relative overflow-hidden rounded-[2rem] border border-yellow-500/50 bg-black/58 px-7 py-8 shadow-2xl backdrop-blur-[10px] sm:px-12 sm:py-9">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,.16),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.09),transparent_38%,rgba(250,204,21,.06))]" />
-
-            <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-yellow-300/90 to-transparent" />
-
-            <div className="absolute bottom-0 left-0 h-px w-full bg-gradient-to-r from-transparent via-yellow-500/45 to-transparent" />
-
-            <div className="relative">
-              <div className="mb-6 text-center">
-                <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full border border-yellow-500/55 bg-yellow-500/10 text-yellow-400 shadow-[0_0_38px_rgba(250,204,21,.28)]">
-                  <Beer size={42} />
+            <div className="relative z-10 min-w-0">
+              <div className="mb-3 flex min-w-0 flex-col items-center text-center sm:mb-6">
+                <div className="mb-2 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.15)] sm:mb-4 sm:h-20 sm:w-20">
+                  <BeerIcon className="h-7 w-7 sm:h-10 sm:w-10" />
                 </div>
 
-                <h1 className="text-3xl font-black tracking-[0.20em] sm:text-4xl">
+                <h1 className="w-full max-w-full break-words text-[22px] font-black leading-none tracking-[0.10em] text-white sm:text-[42px] sm:tracking-[0.22em]">
                   RJ CHOPP <span className="text-yellow-400">SGE</span>
                 </h1>
 
-                <div className="mx-auto my-4 h-px w-28 bg-gradient-to-r from-transparent via-yellow-400 to-transparent" />
+                <div className="my-2 h-px w-16 bg-gradient-to-r from-transparent via-yellow-400/80 to-transparent sm:my-4 sm:w-24" />
 
-                <h2 className="text-3xl font-semibold tracking-wide sm:text-4xl">
+                <h2 className="w-full max-w-full break-words text-[24px] font-bold leading-tight text-white sm:text-[46px]">
                   Acesse o <span className="text-yellow-400">sistema</span>
                 </h2>
 
-                <p className="mt-3 text-sm font-medium text-zinc-300 sm:text-base">
-                  Controle pedidos, estoque e financeiro em um só lugar.
+                <p className="mt-1 max-w-md text-xs text-zinc-300 sm:mt-3 sm:text-base">
+                  Controle pedidos estoque e financeiro em um só lugar
                 </p>
               </div>
 
-              <form onSubmit={login} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-2.5 sm:space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-bold text-yellow-200">
+                  <label className="mb-1.5 block text-sm font-semibold text-yellow-100 sm:mb-2">
                     Usuário
                   </label>
 
-                  <div className="relative">
-                    <User
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400"
-                      size={20}
-                    />
+                  <div className="flex h-11 min-w-0 items-center rounded-2xl border border-yellow-500/25 bg-black/50 px-3 transition focus-within:border-yellow-400 focus-within:shadow-[0_0_25px_rgba(250,204,21,0.10)] sm:h-14 sm:px-4">
+                    <div className="mr-2 shrink-0 text-yellow-400 sm:mr-3">
+                      <UserIcon />
+                    </div>
 
                     <input
-                      value={username}
-                      onChange={(event) => setUsername(event.target.value)}
+                      type="text"
+                      value={login}
+                      onChange={(e) => setLogin(e.target.value)}
                       placeholder="Digite seu usuário"
+                      className="h-full min-w-0 flex-1 bg-transparent text-base text-white outline-none placeholder:text-zinc-500"
                       autoComplete="username"
-                      className={inputClass}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-bold text-yellow-200">
+                  <label className="mb-1.5 block text-sm font-semibold text-yellow-100 sm:mb-2">
                     Senha
                   </label>
 
-                  <div className="relative">
-                    <Lock
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400"
-                      size={20}
-                    />
+                  <div className="flex h-11 min-w-0 items-center rounded-2xl border border-yellow-500/25 bg-black/50 px-3 transition focus-within:border-yellow-400 focus-within:shadow-[0_0_25px_rgba(250,204,21,0.10)] sm:h-14 sm:px-4">
+                    <div className="mr-2 shrink-0 text-yellow-400 sm:mr-3">
+                      <LockIcon />
+                    </div>
 
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={password}
-                      onChange={(event) => setPassword(event.target.value)}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="Digite sua senha"
+                      className="h-full min-w-0 flex-1 bg-transparent text-base text-white outline-none placeholder:text-zinc-500"
                       autoComplete="current-password"
-                      className={inputClass}
                     />
 
                     <button
                       type="button"
-                      onClick={() => setShowPassword((current) => !current)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-300 transition hover:text-yellow-400"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="ml-2 shrink-0 text-zinc-300 transition hover:text-yellow-400"
                     >
-                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="flex cursor-pointer select-none items-center gap-3 text-sm font-medium text-zinc-200">
+                <div className="flex flex-col gap-2 pt-0 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-1">
+                  <label className="flex min-w-0 items-center gap-2 text-xs text-zinc-200 sm:gap-3 sm:text-sm">
                     <input
                       type="checkbox"
-                      checked={rememberLogin}
-                      onChange={(event) => setRememberLogin(event.target.checked)}
-                      className="hidden"
+                      checked={remember}
+                      onChange={(e) => setRemember(e.target.checked)}
+                      className="h-4 w-4 shrink-0 rounded border border-yellow-500/30 bg-black accent-yellow-400 sm:h-5 sm:w-5"
                     />
-
-                    <span
-                      className={`flex h-5 w-5 items-center justify-center rounded border transition ${
-                        rememberLogin
-                          ? 'border-yellow-400 bg-yellow-400 text-black'
-                          : 'border-yellow-500/40 bg-black/40 text-transparent'
-                      }`}
-                    >
-                      <CheckCircle size={15} />
+                    <span className="min-w-0 leading-tight">
+                      Salvar login neste computador
                     </span>
-
-                    Salvar login neste computador
                   </label>
 
                   <button
                     type="button"
-                    className="text-left text-sm font-black text-yellow-400 underline-offset-4 transition hover:text-yellow-300 hover:underline"
+                    className="text-left text-xs font-semibold text-yellow-400 transition hover:text-yellow-300 sm:text-right sm:text-sm"
                   >
-                    Esqueci minha senha
+                    Primeiro acesso
                   </button>
                 </div>
 
+                {error ? (
+                  <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-300 sm:py-3 sm:text-sm">
+                    {error}
+                  </div>
+                ) : null}
+
                 <button
+                  type="submit"
                   disabled={loading}
-                  className="gold-button relative mt-2 flex h-[58px] w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 px-6 text-base font-black text-black shadow-[0_0_38px_rgba(250,204,21,.42)] transition hover:scale-[1.01] hover:shadow-[0_0_60px_rgba(250,204,21,.56)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-1 flex h-11 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-yellow-500 to-yellow-300 text-base font-black text-black shadow-[0_12px_30px_rgba(250,204,21,0.22)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70 sm:mt-2 sm:h-14 sm:text-lg"
                 >
-                  <LogIn size={22} />
                   {loading ? 'Entrando...' : 'Entrar no sistema'}
                 </button>
+
+                <div className="flex items-center justify-between gap-4 pt-0 text-xs sm:pt-1 sm:text-sm">
+                  <button
+                    type="button"
+                    className="font-medium text-yellow-300 transition hover:text-yellow-200"
+                  >
+                    Esqueci minha senha
+                  </button>
+
+                  <button
+                    type="button"
+                    className="font-medium text-yellow-300 transition hover:text-yellow-200"
+                  >
+                    Primeiro acesso
+                  </button>
+                </div>
               </form>
 
-              <div className="mt-6 grid grid-cols-1 gap-3 border-t border-yellow-500/15 pt-5 text-xs text-zinc-300 sm:grid-cols-3">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="mt-0.5 text-yellow-400" size={20} />
-                  <div>
-                    <p className="font-black text-white">Seguro e confiável</p>
-                    <p>Seus dados protegidos com segurança.</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 border-t border-yellow-500/15 pt-3 sm:mt-6 sm:grid-cols-3 sm:gap-3 sm:pt-5">
+                <div className="rounded-2xl border border-yellow-500/12 bg-black/35 p-2.5 sm:p-3">
+                  <div className="mb-1 text-yellow-400 sm:mb-2">
+                    <ShieldIcon />
                   </div>
+                  <h3 className="text-sm font-semibold text-white sm:text-base">Seguro e confiável</h3>
+                  <p className="mt-0.5 text-xs text-zinc-400 sm:mt-1 sm:text-sm">
+                    Seus dados protegidos com segurança
+                  </p>
                 </div>
 
-                <div className="flex items-start gap-3">
-                  <Cloud className="mt-0.5 text-yellow-400" size={20} />
-                  <div>
-                    <p className="font-black text-white">Backup diário</p>
-                    <p>Suas informações sempre protegidas.</p>
+                <div className="rounded-2xl border border-yellow-500/12 bg-black/35 p-2.5 sm:p-3">
+                  <div className="mb-1 text-yellow-400 sm:mb-2">
+                    <CloudIcon />
                   </div>
+                  <h3 className="text-sm font-semibold text-white sm:text-base">Backup diário</h3>
+                  <p className="mt-0.5 text-xs text-zinc-400 sm:mt-1 sm:text-sm">
+                    Suas informações sempre protegidas
+                  </p>
                 </div>
 
-                <div className="flex items-start gap-3">
-                  <Headphones className="mt-0.5 text-yellow-400" size={20} />
-                  <div>
-                    <p className="font-black text-white">Suporte dedicado</p>
-                    <p>Conte com nosso time sempre que precisar.</p>
+                <div className="rounded-2xl border border-yellow-500/12 bg-black/35 p-2.5 sm:p-3">
+                  <div className="mb-1 text-yellow-400 sm:mb-2">
+                    <HeadsetIcon />
                   </div>
+                  <h3 className="text-sm font-semibold text-white sm:text-base">Suporte dedicado</h3>
+                  <p className="mt-0.5 text-xs text-zinc-400 sm:mt-1 sm:text-sm">
+                    Conte com nosso time sempre que precisar
+                  </p>
                 </div>
+              </div>
+
+              <p className="mt-3 text-center text-[11px] text-zinc-400 sm:mt-6 sm:text-sm">
+                © 2024 RJ Chopp SGE. Todos os direitos reservados.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {showIntro ? (
+        <div className="fixed inset-0 z-[100] w-screen max-w-[100vw] overflow-hidden bg-black">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,179,8,0.16),transparent_35%)]" />
+          <div className="relative flex min-h-[100dvh] w-screen max-w-[100vw] items-center justify-center overflow-hidden px-4 text-center">
+            <div className="w-full max-w-[320px] min-w-0 sm:max-w-xl">
+              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.18)] sm:mb-5 sm:h-24 sm:w-24">
+                <BeerIcon className="h-10 w-10 sm:h-12 sm:w-12" />
+              </div>
+
+              <h2 className="w-full break-words text-[25px] font-black leading-tight tracking-[0.10em] text-white sm:text-[54px] sm:tracking-[0.18em]">
+                RJ CHOPP <span className="text-yellow-400">SGE</span>
+              </h2>
+
+              <div className="mx-auto my-4 h-px w-28 bg-gradient-to-r from-transparent via-yellow-400 to-transparent sm:my-5 sm:w-40" />
+
+              <p className="text-sm uppercase tracking-[0.18em] text-yellow-100/90 sm:text-xl sm:tracking-[0.38em]">
+                Entrando no sistema
+              </p>
+
+              <div className="mx-auto mt-5 h-2 w-full max-w-[240px] overflow-hidden rounded-full bg-zinc-800 sm:mt-6 sm:max-w-sm">
+                <div className="h-full w-full animate-[loadingBar_1.2s_ease-in-out] rounded-full bg-gradient-to-r from-yellow-500 to-yellow-300" />
               </div>
             </div>
           </div>
 
-          <p className="mt-5 text-center text-sm text-zinc-300 drop-shadow">
-            © 2024 RJ Chopp SGE. Todos os direitos reservados.
-          </p>
+          <style>{`
+            @keyframes loadingBar {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(0%); }
+            }
+          `}</style>
         </div>
-      </section>
+      ) : null}
     </main>
   );
 }
