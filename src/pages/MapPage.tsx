@@ -106,13 +106,58 @@ function getDateKey(value: any) {
   return date.toISOString().split('T')[0];
 }
 
-function getOrderMeta(orderId: string) {
+function getNoteField(note: any, label: string) {
+  const lines = String(note || '').split('\n');
+  const found = lines.find((line) =>
+    line.toLowerCase().startsWith(label.toLowerCase())
+  );
+
+  if (!found) {
+    return '';
+  }
+
+  const value = found.slice(label.length).trim();
+
+  return value === '-' ? '' : value;
+}
+
+function parseOrderNote(note: any) {
+  return {
+    deliveryDate: getNoteField(note, 'Data de entrega:'),
+    deliveryTime: getNoteField(note, 'Horário de entrega:'),
+    deliveryAddress: getNoteField(note, 'Endereço da entrega:'),
+    pickupDate: getNoteField(note, 'Data para buscar de volta:'),
+    returnItems: getNoteField(note, 'Itens para buscar:'),
+    observation: getNoteField(note, 'Observação:'),
+  };
+}
+
+function getOrderMeta(orderId: string, order: any = null) {
   const meta = readStorage(ORDER_META_STORAGE_KEY, {});
-  return meta[orderId] || {};
+  const noteMeta = parseOrderNote(order?.note || '');
+
+  return {
+    ...noteMeta,
+    ...(meta[orderId] || {}),
+  };
 }
 
 function getFullAddress(item: any) {
-  return String(item.address || item.client?.address || '').trim();
+  const noteMeta = parseOrderNote(item?.note || '');
+
+  return String(
+    item.deliveryAddress ||
+      noteMeta.deliveryAddress ||
+      item.address ||
+      item.client?.address ||
+      ''
+  ).trim();
+}
+
+function getDeliveryTime(item: any) {
+  const noteMeta = parseOrderNote(item?.note || '');
+
+  return String(item.deliveryTime || noteMeta.deliveryTime || '').trim();
 }
 
 function getMapsUrl(address: string) {
@@ -176,7 +221,7 @@ function getTypeConfig(type: string) {
 
 function isLateOrder(order: any) {
   const status = String(order.status || '').toUpperCase();
-  const meta = getOrderMeta(order.id);
+  const meta = getOrderMeta(order.id, order);
   const deliveryDate =
     getDateKey(meta.deliveryDate) ||
     getDateKey(order.deliveryDate) ||
@@ -319,7 +364,7 @@ export default function MapPage() {
   const locations = useMemo(() => {
     const orderLocations = orders
       .filter((order) => {
-        const meta = getOrderMeta(order.id);
+        const meta = getOrderMeta(order.id, order);
         const address = getFullAddress(order);
 
         if (!address) {
@@ -338,7 +383,7 @@ export default function MapPage() {
         return deliveryDate === today || deliveryDate < today;
       })
       .map((order) => {
-        const meta = getOrderMeta(order.id);
+        const meta = getOrderMeta(order.id, order);
 
         return {
           id: `order-${order.id}`,
@@ -349,6 +394,7 @@ export default function MapPage() {
           phone: order.client?.phone || '',
           status: order.status || 'Pendente',
           date: meta.deliveryDate || getDateKey(order.createdAt),
+          deliveryTime: meta.deliveryTime || getDeliveryTime(order),
           item: '',
           isLate: isLateOrder(order),
         };
@@ -400,6 +446,7 @@ export default function MapPage() {
       location.title.toLowerCase().includes(text) ||
       location.subtitle.toLowerCase().includes(text) ||
       location.address.toLowerCase().includes(text) ||
+      location.deliveryTime?.toLowerCase().includes(text) ||
       location.phone.toLowerCase().includes(text) ||
       location.status.toLowerCase().includes(text) ||
       location.item?.toLowerCase().includes(text);
@@ -831,6 +878,12 @@ export default function MapPage() {
                           {location.address}
                         </p>
 
+                        {location.type === 'ORDER' && location.deliveryTime && (
+                          <p className={`mt-2 text-sm font-black ${active ? 'text-black' : 'text-yellow-400'}`}>
+                            Entregar às {location.deliveryTime}
+                          </p>
+                        )}
+
                         {location.type === 'ORDER' && location.isLate && (
                           <p className={`mt-2 text-sm font-black ${active ? 'text-black' : 'text-red-400'}`}>
                             ⚠ Pedido atrasado desde {formatDate(location.date)}
@@ -886,6 +939,13 @@ export default function MapPage() {
                         <p className="mt-1 flex items-center gap-2 text-zinc-500">
                           <Phone size={16} className="text-yellow-400" />
                           {selectedLocation.phone}
+                        </p>
+                      )}
+
+                      {selectedLocation.type === 'ORDER' && selectedLocation.deliveryTime && (
+                        <p className="mt-2 flex items-center gap-2 font-black text-yellow-400">
+                          <CalendarDays size={18} />
+                          Entregar às {selectedLocation.deliveryTime}
                         </p>
                       )}
 

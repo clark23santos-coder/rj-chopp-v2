@@ -162,16 +162,46 @@ function getStatusClass(status: string) {
 
 function buildOrderNote(data: any) {
   const deliveryDate = data.deliveryDate || '';
+  const deliveryTime = data.deliveryTime || '';
+  const deliveryAddress = data.deliveryAddress || '';
   const pickupDate = data.pickupDate || '';
   const returnItems = data.returnItems || '';
   const observation = data.observation || '';
 
   return [
     `Data de entrega: ${deliveryDate || '-'}`,
+    `Horário de entrega: ${deliveryTime || '-'}`,
+    `Endereço da entrega: ${deliveryAddress || '-'}`,
     `Data para buscar de volta: ${pickupDate || '-'}`,
     `Itens para buscar: ${returnItems || '-'}`,
     `Observação: ${observation || '-'}`,
   ].join('\n');
+}
+
+function getNoteField(note: any, label: string) {
+  const lines = String(note || '').split('\n');
+  const found = lines.find((line) =>
+    line.toLowerCase().startsWith(label.toLowerCase())
+  );
+
+  if (!found) {
+    return '';
+  }
+
+  const value = found.slice(label.length).trim();
+
+  return value === '-' ? '' : value;
+}
+
+function parseOrderNote(note: any) {
+  return {
+    deliveryDate: getNoteField(note, 'Data de entrega:'),
+    deliveryTime: getNoteField(note, 'Horário de entrega:'),
+    deliveryAddress: getNoteField(note, 'Endereço da entrega:'),
+    pickupDate: getNoteField(note, 'Data para buscar de volta:'),
+    returnItems: getNoteField(note, 'Itens para buscar:'),
+    observation: getNoteField(note, 'Observação:'),
+  };
 }
 
 function getShortId(id: any) {
@@ -234,28 +264,61 @@ function sortProductsAlphabetically(products: any[]) {
   });
 }
 
-function getProductsForOrderSelect(products: any[], selectedProductId: string) {
+function normalizeSearchText(value: any) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s,.-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getProductSearchText(product: any) {
+  return normalizeSearchText([
+    product?.name,
+    product?.brand,
+    product?.category,
+    product?.unit,
+    product?.salePrice,
+  ]
+    .filter(Boolean)
+    .join(' '));
+}
+
+function productMatchesSearch(product: any, search: string) {
+  const terms = normalizeSearchText(search)
+    .split(' ')
+    .map((term) => term.trim())
+    .filter(Boolean);
+
+  if (terms.length === 0) {
+    return true;
+  }
+
+  const productText = getProductSearchText(product);
+
+  return terms.every((term) => productText.includes(term));
+}
+
+function getProductsForOrderSelect(
+  products: any[],
+  selectedProductId: string,
+  searchText = ''
+) {
   return sortProductsAlphabetically(
     products.filter((product) => {
       if (product.id === selectedProductId) {
         return true;
       }
 
-      return !isAccessoryProduct(product);
+      if (isAccessoryProduct(product)) {
+        return false;
+      }
+
+      return productMatchesSearch(product, searchText);
     })
   );
-}
-
-function getProductSearchText(product: any) {
-  return [
-    product?.name,
-    product?.brand,
-    product?.category,
-    product?.unit,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
 }
 
 function isChoppOrBarrelProduct(product: any) {
@@ -349,6 +412,31 @@ function isLateScheduledOrder(order: any, meta: any, today: string) {
   return deliveryDate < today;
 }
 
+
+function getOrderDeliveryAddress(order: any, meta: any = {}) {
+  const noteMeta = parseOrderNote(order?.note || '');
+
+  return String(
+    meta.deliveryAddress ||
+      noteMeta.deliveryAddress ||
+      order?.deliveryAddress ||
+      order?.address ||
+      order?.client?.address ||
+      ''
+  ).trim();
+}
+
+function getOrderDeliveryTime(order: any, meta: any = {}) {
+  const noteMeta = parseOrderNote(order?.note || '');
+
+  return String(
+    meta.deliveryTime ||
+      noteMeta.deliveryTime ||
+      order?.deliveryTime ||
+      ''
+  ).trim();
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -365,6 +453,8 @@ export default function OrdersPage() {
   const [returnFilter, setReturnFilter] = useState('');
 
   const [loading, setLoading] = useState(false);
+  const [quickClientMode, setQuickClientMode] = useState(false);
+  const [productSearches, setProductSearches] = useState(['']);
 
   const [orderItems, setOrderItems] = useState([
     {
@@ -389,7 +479,16 @@ export default function OrdersPage() {
 
   function getOrderMeta(orderId: string) {
     const meta = readStorage(ORDER_META_STORAGE_KEY, {});
-    return meta[orderId] || {};
+    const order =
+      orders.find((item) => item.id === orderId) ||
+      (selectedOrder?.id === orderId ? selectedOrder : null) ||
+      (deliveryOrder?.id === orderId ? deliveryOrder : null);
+    const noteMeta = parseOrderNote(order?.note || '');
+
+    return {
+      ...noteMeta,
+      ...(meta[orderId] || {}),
+    };
   }
 
   function saveOrderMeta(orderId: string, data: any) {
@@ -444,6 +543,8 @@ export default function OrdersPage() {
 
   function openNewOrder() {
     setEditingOrder(null);
+    setQuickClientMode(false);
+    setProductSearches(['']);
     setOrderItems([
       {
         productId: '',
@@ -470,6 +571,8 @@ export default function OrdersPage() {
           ];
 
     setOrderItems(items);
+    setProductSearches(items.map(() => ''));
+    setQuickClientMode(false);
     setShowModal(true);
   }
 
@@ -485,6 +588,8 @@ export default function OrdersPage() {
       order.client?.name?.toLowerCase().includes(text) ||
       order.client?.phone?.toLowerCase().includes(text) ||
       order.client?.address?.toLowerCase().includes(text) ||
+      getOrderDeliveryAddress(order, meta).toLowerCase().includes(text) ||
+      getOrderDeliveryTime(order, meta).toLowerCase().includes(text) ||
       order.paymentMethod?.toLowerCase().includes(text) ||
       order.status?.toLowerCase().includes(text) ||
       meta.returnItems?.toLowerCase().includes(text);
@@ -507,6 +612,36 @@ export default function OrdersPage() {
         String(order.paymentMethod || '').toUpperCase() === paymentFilter;
 
       return matchesSearch && matchesPayment && lateScheduledOrder;
+    }
+
+    const shouldHideDeliveredFromOrders =
+      !statusFilter &&
+      !returnFilter &&
+      !text &&
+      orderStatus === 'APPROVED';
+
+    if (shouldHideDeliveredFromOrders) {
+      return false;
+    }
+
+    const shouldHideFinishedFromOrders =
+      !statusFilter &&
+      !returnFilter &&
+      !text &&
+      orderStatus === 'FINISHED';
+
+    if (shouldHideFinishedFromOrders) {
+      return false;
+    }
+
+    const shouldHideCancelledFromOrders =
+      !statusFilter &&
+      !returnFilter &&
+      !text &&
+      (orderStatus === 'CANCELLED' || orderStatus === 'CANCELED');
+
+    if (shouldHideCancelledFromOrders) {
+      return false;
     }
 
     const shouldHideFutureScheduledFromOpenOrders =
@@ -642,6 +777,7 @@ export default function OrdersPage() {
         quantity: 1,
       },
     ]);
+    setProductSearches([...productSearches, '']);
   }
 
   function removeItem(index: number) {
@@ -652,11 +788,13 @@ export default function OrdersPage() {
           quantity: 1,
         },
       ]);
+      setProductSearches(['']);
 
       return;
     }
 
     setOrderItems(orderItems.filter((_, itemIndex) => itemIndex !== index));
+    setProductSearches(productSearches.filter((_, itemIndex) => itemIndex !== index));
   }
 
   function updateItem(index: number, field: string, value: any) {
@@ -668,11 +806,28 @@ export default function OrdersPage() {
     };
 
     if (field === 'productId') {
-      setOrderItems(addAutomaticChoppAccessories(updated));
+      const withAccessories = addAutomaticChoppAccessories(updated);
+      setOrderItems(withAccessories);
+      setProductSearches((current) => {
+        const next = [...current];
+        next[index] = '';
+
+        while (next.length < withAccessories.length) {
+          next.push('');
+        }
+
+        return next.slice(0, withAccessories.length);
+      });
       return;
     }
 
     setOrderItems(updated);
+  }
+
+  function updateProductSearch(index: number, value: string) {
+    const updated = [...productSearches];
+    updated[index] = value;
+    setProductSearches(updated);
   }
 
   function calculateTotal() {
@@ -731,6 +886,9 @@ export default function OrdersPage() {
       total: data.total,
       paymentMethod: data.paymentMethod,
       note: data.note,
+      deliveryAddress: metaData.deliveryAddress || client?.address || '',
+      deliveryTime: metaData.deliveryTime || '',
+      address: metaData.deliveryAddress || client?.address || '',
       items: offlineItems,
       stockDiscounted: data.discountStockNow,
       createdAt: new Date().toISOString(),
@@ -747,15 +905,62 @@ export default function OrdersPage() {
 
       const form = new FormData(event.currentTarget);
 
-      const clientId = String(form.get('clientId') || '');
+      let clientId = String(form.get('clientId') || '');
       const paymentMethod = String(form.get('paymentMethod') || '');
       const deliveryDate = String(form.get('deliveryDate') || '');
+      const deliveryTime = String(form.get('deliveryTime') || '');
+      const deliveryAddress = String(form.get('deliveryAddress') || '');
       const observation = String(form.get('observation') || '');
       const discountStockNowValue = String(form.get('discountStockNow') || 'SIM');
       const discountStockNow = discountStockNowValue === 'SIM';
 
+      const quickClientName = String(form.get('quickClientName') || '').trim();
+      const quickClientPhone = String(form.get('quickClientPhone') || '').trim();
+      const quickClientEmail = String(form.get('quickClientEmail') || '').trim();
+      const quickClientAddress = String(form.get('quickClientAddress') || '').trim();
+
+      if (quickClientMode && quickClientName) {
+        if (!quickClientPhone) {
+          alert('Coloque o telefone do cliente rápido.');
+          return;
+        }
+
+        if (!isOnline()) {
+          alert('Para criar cliente rápido, conecte na internet primeiro.');
+          return;
+        }
+
+        const clientResponse = await api.post(
+          '/clients',
+          {
+            name: quickClientName,
+            phone: quickClientPhone,
+            email: quickClientEmail,
+            address: quickClientAddress,
+          },
+          authHeaders()
+        );
+
+        const createdClient = clientResponse.data;
+
+        if (!createdClient?.id) {
+          alert('Não foi possível criar o cliente rápido.');
+          return;
+        }
+
+        clientId = createdClient.id;
+        setClients((current) => [createdClient, ...current]);
+
+        addAuditLog({
+          area: 'Clientes',
+          action: 'CREATE',
+          title: `Cliente criado no pedido: ${quickClientName}`,
+          description: `Telefone: ${quickClientPhone || '-'}\nEndereço: ${quickClientAddress || '-'}`,
+        });
+      }
+
       if (!clientId) {
-        alert('Selecione um cliente.');
+        alert('Selecione um cliente ou crie um cliente rápido.');
         return;
       }
 
@@ -793,10 +998,14 @@ export default function OrdersPage() {
         total,
         note: buildOrderNote({
           deliveryDate,
+          deliveryTime,
+          deliveryAddress,
           pickupDate: getOrderMeta(editingOrder?.id || '')?.pickupDate || '',
           returnItems: getOrderMeta(editingOrder?.id || '')?.returnItems || '',
           observation,
         }),
+        deliveryTime,
+        deliveryAddress,
         items,
         discountStockNow: editingOrder
           ? hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id))
@@ -808,6 +1017,8 @@ export default function OrdersPage() {
       if (!isOnline() && !editingOrder) {
         const offlineOrder = createOfflineOrder(data, {
           deliveryDate,
+          deliveryTime,
+          deliveryAddress,
           observation,
           pickupDate: '',
           returnItems: '',
@@ -818,6 +1029,8 @@ export default function OrdersPage() {
 
         saveOrderMeta(offlineOrder.id, {
           deliveryDate,
+          deliveryTime,
+          deliveryAddress,
           observation,
           pickupDate: '',
           returnItems: '',
@@ -832,6 +1045,8 @@ export default function OrdersPage() {
             data,
             meta: {
               deliveryDate,
+              deliveryTime,
+              deliveryAddress,
               observation,
               pickupDate: '',
               returnItems: '',
@@ -857,6 +1072,8 @@ export default function OrdersPage() {
             quantity: 1,
           },
         ]);
+        setProductSearches(['']);
+        setQuickClientMode(false);
 
         alert('Pedido salvo offline. Quando a internet voltar, o sistema vai sincronizar.');
         return;
@@ -876,6 +1093,8 @@ export default function OrdersPage() {
 
         saveOrderMeta(editingOrder.id, {
           deliveryDate,
+          deliveryTime,
+          deliveryAddress,
           observation,
           stockDiscounted: hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id)),
         });
@@ -892,6 +1111,8 @@ export default function OrdersPage() {
         if (response.data?.id) {
           saveOrderMeta(response.data.id, {
             deliveryDate,
+            deliveryTime,
+            deliveryAddress,
             observation,
             pickupDate: '',
             returnItems: '',
@@ -918,6 +1139,8 @@ export default function OrdersPage() {
           quantity: 1,
         },
       ]);
+      setProductSearches(['']);
+      setQuickClientMode(false);
 
       await loadData();
     } catch (error) {
@@ -937,6 +1160,8 @@ export default function OrdersPage() {
         total: Number(order.total || 0),
         note: buildOrderNote({
           deliveryDate: getOrderMeta(order.id)?.deliveryDate || '',
+          deliveryTime: getOrderMeta(order.id)?.deliveryTime || '',
+          deliveryAddress: getOrderMeta(order.id)?.deliveryAddress || getOrderDeliveryAddress(order, getOrderMeta(order.id)),
           pickupDate: extra.pickupDate || getOrderMeta(order.id)?.pickupDate || '',
           returnItems: extra.returnItems || getOrderMeta(order.id)?.returnItems || '',
           observation: extra.observation || getOrderMeta(order.id)?.observation || '',
@@ -988,6 +1213,8 @@ export default function OrdersPage() {
         total: Number(deliveryOrder.total || 0),
         note: buildOrderNote({
           deliveryDate: getOrderMeta(deliveryOrder.id)?.deliveryDate || '',
+          deliveryTime: getOrderMeta(deliveryOrder.id)?.deliveryTime || '',
+          deliveryAddress: getOrderMeta(deliveryOrder.id)?.deliveryAddress || getOrderDeliveryAddress(deliveryOrder, getOrderMeta(deliveryOrder.id)),
           pickupDate,
           returnItems,
           observation,
@@ -999,6 +1226,8 @@ export default function OrdersPage() {
         pickupDate,
         returnItems,
         observation,
+        deliveryTime: getOrderMeta(deliveryOrder.id)?.deliveryTime || '',
+        deliveryAddress: getOrderMeta(deliveryOrder.id)?.deliveryAddress || getOrderDeliveryAddress(deliveryOrder, getOrderMeta(deliveryOrder.id)),
         deliveredAt: new Date().toISOString(),
         stockDiscounted: true,
       });
@@ -1010,9 +1239,10 @@ export default function OrdersPage() {
         orderId: deliveryOrder.id,
         client: deliveryOrder.client?.name || 'Cliente não informado',
         phone: deliveryOrder.client?.phone || '',
-        address: deliveryOrder.client?.address || '',
+        address: getOrderMeta(deliveryOrder.id)?.deliveryAddress || getOrderDeliveryAddress(deliveryOrder, getOrderMeta(deliveryOrder.id)),
         item: returnItems,
         deliveryDate: getOrderMeta(deliveryOrder.id)?.deliveryDate || '',
+        deliveryTime: getOrderMeta(deliveryOrder.id)?.deliveryTime || '',
         pickupDate,
         observation:
           observation ||
@@ -1415,7 +1645,7 @@ export default function OrdersPage() {
             onChange={(event) => setStatusFilter(event.target.value)}
             className={inputClass}
           >
-            <option value="">Todos os pedidos</option>
+            <option value="">Pedidos para entregar</option>
             <option value="AGENDADO">Pedidos agendados</option>
             <option value="ATRASADO">Pedidos atrasados</option>
             <option value="PENDING">Pendente</option>
@@ -1506,7 +1736,7 @@ export default function OrdersPage() {
                             )}
 
                             <p className="mt-1 text-xs text-zinc-500">
-                              {order.client?.address || 'Sem endereço'}
+                              {getOrderDeliveryAddress(order, meta) || 'Sem endereço'}
                             </p>
                           </div>
                         </div>
@@ -1522,6 +1752,12 @@ export default function OrdersPage() {
                       <td className="p-5 text-zinc-400">
                         <div>
                           <p>{formatDate(meta.deliveryDate)}</p>
+
+                          {getOrderDeliveryTime(order, meta) && (
+                            <p className="mt-1 text-xs font-black text-yellow-400">
+                              {getOrderDeliveryTime(order, meta)}
+                            </p>
+                          )}
 
                           {lateScheduledOrder && (
                             <p className="mt-1 text-xs font-black text-red-400">
@@ -1706,6 +1942,7 @@ export default function OrdersPage() {
                   onClick={() => {
                     setShowModal(false);
                     setEditingOrder(null);
+                    setQuickClientMode(false);
                   }}
                   className="rounded-2xl border border-yellow-500/20 bg-black/45 p-3 text-zinc-300 transition hover:bg-yellow-400 hover:text-black"
                 >
@@ -1729,6 +1966,16 @@ export default function OrdersPage() {
                         </option>
                       ))}
                     </select>
+
+                    {!editingOrder && (
+                      <button
+                        type="button"
+                        onClick={() => setQuickClientMode((current) => !current)}
+                        className="mt-3 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-2 text-sm font-black text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+                      >
+                        {quickClientMode ? 'Usar cliente já cadastrado' : '+ Criar cliente rápido'}
+                      </button>
+                    )}
                   </Field>
 
                   <Field label="Forma de pagamento">
@@ -1755,6 +2002,34 @@ export default function OrdersPage() {
                     />
                   </Field>
 
+                  <Field label="Horário da entrega">
+                    <input
+                      name="deliveryTime"
+                      type="time"
+                      defaultValue={
+                        editingOrder ? getOrderMeta(editingOrder.id)?.deliveryTime || '' : ''
+                      }
+                      className={inputClass}
+                    />
+                  </Field>
+
+                  <div className="md:col-span-2">
+                    <Field label="Endereço específico da entrega (opcional)">
+                      <input
+                        name="deliveryAddress"
+                        placeholder="Preencha só se o endereço desse pedido for diferente do cadastro do cliente"
+                        defaultValue={
+                          editingOrder ? getOrderMeta(editingOrder.id)?.deliveryAddress || '' : ''
+                        }
+                        className={inputClass}
+                      />
+                    </Field>
+
+                    <p className="mt-2 text-sm text-zinc-500">
+                      Se deixar vazio, a nota e o mapa usam o endereço cadastrado no cliente.
+                    </p>
+                  </div>
+
                   {!editingOrder && (
                     <Field label="Descontar estoque agora?">
                       <select
@@ -1773,6 +2048,60 @@ export default function OrdersPage() {
                     </Field>
                   )}
                 </div>
+
+                {quickClientMode && !editingOrder && (
+                  <div className="rounded-2xl border border-yellow-500/15 bg-black/45 p-5">
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-yellow-400">
+                        <User size={22} />
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-black text-yellow-400">
+                          Criar cliente rápido
+                        </h3>
+
+                        <p className="text-sm text-zinc-400">
+                          Preencha aqui para criar o cliente e já usar nesse pedido.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="Nome do cliente">
+                        <input
+                          name="quickClientName"
+                          placeholder="Nome do cliente"
+                          className={inputClass}
+                        />
+                      </Field>
+
+                      <Field label="Telefone">
+                        <input
+                          name="quickClientPhone"
+                          placeholder="Telefone do cliente"
+                          className={inputClass}
+                        />
+                      </Field>
+
+                      <Field label="Endereço">
+                        <input
+                          name="quickClientAddress"
+                          placeholder="Endereço do cliente"
+                          className={inputClass}
+                        />
+                      </Field>
+
+                      <Field label="Email opcional">
+                        <input
+                          name="quickClientEmail"
+                          placeholder="Email opcional"
+                          className={inputClass}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                )}
 
                 {!editingOrder && (
                   <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5 text-blue-300">
@@ -1846,21 +2175,38 @@ export default function OrdersPage() {
                         className="rounded-2xl border border-yellow-500/10 bg-black/45 p-4"
                       >
                         <div className="grid gap-3 md:grid-cols-[1fr_120px_120px]">
-                          <select
-                            value={item.productId}
-                            onChange={(event) =>
-                              updateItem(index, 'productId', event.target.value)
-                            }
-                            className={inputClass}
-                          >
-                            <option value="">Selecione um produto</option>
+                          <div>
+                            <div className="relative mb-3">
+                              <Search
+                                size={18}
+                                className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400"
+                              />
 
-                            {getProductsForOrderSelect(products, item.productId).map((productItem) => (
-                              <option key={productItem.id} value={productItem.id}>
-                                {getProductDisplayName(productItem)} - {formatMoney(productItem.salePrice)}
-                              </option>
-                            ))}
-                          </select>
+                              <input
+                                type="text"
+                                value={productSearches[index] || ''}
+                                onChange={(event) => updateProductSearch(index, event.target.value)}
+                                placeholder="Pesquisar produto. Ex: agua com gas, heineken, chopp 30..."
+                                className={`${inputClass} pl-11`}
+                              />
+                            </div>
+
+                            <select
+                              value={item.productId}
+                              onChange={(event) =>
+                                updateItem(index, 'productId', event.target.value)
+                              }
+                              className={inputClass}
+                            >
+                              <option value="">Selecione um produto</option>
+
+                              {getProductsForOrderSelect(products, item.productId, productSearches[index] || '').map((productItem) => (
+                                <option key={productItem.id} value={productItem.id}>
+                                  {getProductDisplayName(productItem)} - {formatMoney(productItem.salePrice)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
                           <input
                             type="number"
@@ -1929,6 +2275,7 @@ export default function OrdersPage() {
                   onClick={() => {
                     setShowModal(false);
                     setEditingOrder(null);
+                    setQuickClientMode(false);
                   }}
                   className="w-full rounded-2xl border border-yellow-500/15 bg-black/45 py-4 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
                 >
@@ -1971,8 +2318,14 @@ export default function OrdersPage() {
                   </p>
 
                   <p className="text-zinc-400">
-                    {deliveryOrder.client?.address || 'Sem endereço'}
+                    {getOrderDeliveryAddress(deliveryOrder, getOrderMeta(deliveryOrder.id)) || 'Sem endereço'}
                   </p>
+
+                  {getOrderDeliveryTime(deliveryOrder, getOrderMeta(deliveryOrder.id)) && (
+                    <p className="mt-1 text-sm font-bold text-yellow-400">
+                      Entrega às {getOrderDeliveryTime(deliveryOrder, getOrderMeta(deliveryOrder.id))}
+                    </p>
+                  )}
                 </div>
 
                 <Field label="Data para buscar de volta">
@@ -2110,7 +2463,7 @@ export default function OrdersPage() {
                       </p>
 
                       <p>
-                        {selectedOrder.client?.address || '-'}
+                        {getOrderDeliveryAddress(selectedOrder, getOrderMeta(selectedOrder.id)) || '-'}
                       </p>
                     </div>
                   </div>
@@ -2161,6 +2514,16 @@ export default function OrdersPage() {
 
                       <p className="font-bold">
                         {formatDate(getOrderMeta(selectedOrder.id)?.deliveryDate)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-bold text-zinc-500 uppercase">
+                        Horário
+                      </p>
+
+                      <p className="font-bold">
+                        {getOrderDeliveryTime(selectedOrder, getOrderMeta(selectedOrder.id)) || '-'}
                       </p>
                     </div>
 
