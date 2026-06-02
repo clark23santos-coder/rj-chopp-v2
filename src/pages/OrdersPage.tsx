@@ -164,6 +164,8 @@ function buildOrderNote(data: any) {
   const deliveryDate = data.deliveryDate || '';
   const deliveryTime = data.deliveryTime || '';
   const deliveryAddress = data.deliveryAddress || '';
+  const orderDiscount = data.orderDiscount || 0;
+  const orderSurcharge = data.orderSurcharge || 0;
   const pickupDate = data.pickupDate || '';
   const returnItems = data.returnItems || '';
   const observation = data.observation || '';
@@ -172,6 +174,8 @@ function buildOrderNote(data: any) {
     `Data de entrega: ${deliveryDate || '-'}`,
     `Horário de entrega: ${deliveryTime || '-'}`,
     `Endereço da entrega: ${deliveryAddress || '-'}`,
+    `Desconto geral: ${orderDiscount || 0}`,
+    `Acréscimo geral: ${orderSurcharge || 0}`,
     `Data para buscar de volta: ${pickupDate || '-'}`,
     `Itens para buscar: ${returnItems || '-'}`,
     `Observação: ${observation || '-'}`,
@@ -198,6 +202,8 @@ function parseOrderNote(note: any) {
     deliveryDate: getNoteField(note, 'Data de entrega:'),
     deliveryTime: getNoteField(note, 'Horário de entrega:'),
     deliveryAddress: getNoteField(note, 'Endereço da entrega:'),
+    orderDiscount: getNoteField(note, 'Desconto geral:'),
+    orderSurcharge: getNoteField(note, 'Acréscimo geral:'),
     pickupDate: getNoteField(note, 'Data para buscar de volta:'),
     returnItems: getNoteField(note, 'Itens para buscar:'),
     observation: getNoteField(note, 'Observação:'),
@@ -455,11 +461,16 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(false);
   const [quickClientMode, setQuickClientMode] = useState(false);
   const [productSearches, setProductSearches] = useState(['']);
+  const [orderDiscount, setOrderDiscount] = useState(0);
+  const [orderSurcharge, setOrderSurcharge] = useState(0);
 
   const [orderItems, setOrderItems] = useState([
     {
       productId: '',
       quantity: 1,
+      unitPrice: 0,
+      discount: 0,
+      surcharge: 0,
     },
   ]);
 
@@ -545,10 +556,15 @@ export default function OrdersPage() {
     setEditingOrder(null);
     setQuickClientMode(false);
     setProductSearches(['']);
+    setOrderDiscount(0);
+    setOrderSurcharge(0);
     setOrderItems([
       {
         productId: '',
         quantity: 1,
+        unitPrice: 0,
+        discount: 0,
+        surcharge: 0,
       },
     ]);
     setShowModal(true);
@@ -559,19 +575,35 @@ export default function OrdersPage() {
 
     const items =
       order.items?.length > 0
-        ? order.items.map((item: any) => ({
-            productId: item.productId || item.product?.id || '',
-            quantity: Number(item.quantity || 1),
-          }))
+        ? order.items.map((item: any) => {
+            const quantity = Number(item.quantity || 1);
+            const unitPrice = getItemUnitPrice(item);
+            const subtotal = quantity * unitPrice;
+            const itemTotal = Number(item.total || subtotal);
+
+            return {
+              productId: item.productId || item.product?.id || '',
+              quantity,
+              unitPrice,
+              discount: itemTotal < subtotal ? subtotal - itemTotal : 0,
+              surcharge: itemTotal > subtotal ? itemTotal - subtotal : 0,
+            };
+          })
         : [
             {
               productId: '',
               quantity: 1,
+              unitPrice: 0,
+              discount: 0,
+              surcharge: 0,
             },
           ];
 
     setOrderItems(items);
     setProductSearches(items.map(() => ''));
+    const meta = getOrderMeta(order.id);
+    setOrderDiscount(Number(meta.orderDiscount || 0));
+    setOrderSurcharge(Number(meta.orderSurcharge || 0));
     setQuickClientMode(false);
     setShowModal(true);
   }
@@ -756,6 +788,9 @@ export default function OrdersPage() {
       updated.push({
         productId: chopeira.id,
         quantity: 1,
+        unitPrice: Number(chopeira.salePrice || 0),
+        discount: 0,
+        surcharge: 0,
       });
     }
 
@@ -763,6 +798,9 @@ export default function OrdersPage() {
       updated.push({
         productId: cilindro.id,
         quantity: 1,
+        unitPrice: Number(cilindro.salePrice || 0),
+        discount: 0,
+        surcharge: 0,
       });
     }
 
@@ -775,6 +813,9 @@ export default function OrdersPage() {
       {
         productId: '',
         quantity: 1,
+        unitPrice: 0,
+        discount: 0,
+        surcharge: 0,
       },
     ]);
     setProductSearches([...productSearches, '']);
@@ -786,6 +827,9 @@ export default function OrdersPage() {
         {
           productId: '',
           quantity: 1,
+          unitPrice: 0,
+          discount: 0,
+          surcharge: 0,
         },
       ]);
       setProductSearches(['']);
@@ -806,6 +850,16 @@ export default function OrdersPage() {
     };
 
     if (field === 'productId') {
+      const product = products.find((productItem) => productItem.id === value);
+
+      updated[index] = {
+        ...updated[index],
+        productId: value,
+        unitPrice: Number(product?.salePrice || 0),
+        discount: 0,
+        surcharge: 0,
+      };
+
       const withAccessories = addAutomaticChoppAccessories(updated);
       setOrderItems(withAccessories);
       setProductSearches((current) => {
@@ -830,18 +884,51 @@ export default function OrdersPage() {
     setProductSearches(updated);
   }
 
-  function calculateTotal() {
-    return orderItems.reduce((total, item) => {
-      const product = products.find(
-        (productItem) => productItem.id === item.productId
-      );
+  function getItemPriceForForm(item: any) {
+    if (item.unitPrice !== undefined && item.unitPrice !== '') {
+      return Number(item.unitPrice || 0);
+    }
 
-      return (
-        total +
-        Number(product?.salePrice || 0) *
-          Number(item.quantity || 0)
-      );
-    }, 0);
+    const product = products.find(
+      (productItem) => productItem.id === item.productId
+    );
+
+    return Number(product?.salePrice || 0);
+  }
+
+  function calculateItemSubtotal(item: any) {
+    return getItemPriceForForm(item) * Number(item.quantity || 0);
+  }
+
+  function calculateItemTotal(item: any) {
+    const subtotal = calculateItemSubtotal(item);
+    const discount = Number(item.discount || 0);
+    const surcharge = Number(item.surcharge || 0);
+
+    return Math.max(0, subtotal - discount + surcharge);
+  }
+
+  function calculateItemsSubtotal() {
+    return orderItems.reduce((total, item) => total + calculateItemSubtotal(item), 0);
+  }
+
+  function calculateItemsDiscount() {
+    return orderItems.reduce((total, item) => total + Number(item.discount || 0), 0);
+  }
+
+  function calculateItemsSurcharge() {
+    return orderItems.reduce((total, item) => total + Number(item.surcharge || 0), 0);
+  }
+
+  function calculateItemsTotal() {
+    return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
+  }
+
+  function calculateTotal() {
+    return Math.max(
+      0,
+      calculateItemsTotal() - Number(orderDiscount || 0) + Number(orderSurcharge || 0)
+    );
   }
 
   function getOrderItems(order: any) {
@@ -874,6 +961,8 @@ export default function OrdersPage() {
         product,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
+        discount: item.discount || 0,
+        surcharge: item.surcharge || 0,
         total: item.total,
       };
     });
@@ -974,18 +1063,18 @@ export default function OrdersPage() {
       }
 
       const items = validItems.map((item) => {
-        const product = products.find(
-          (productItem) => productItem.id === item.productId
-        );
-
         const quantity = Number(item.quantity || 1);
-        const unitPrice = Number(product?.salePrice || 0);
+        const unitPrice = getItemPriceForForm(item);
+        const discount = Number(item.discount || 0);
+        const surcharge = Number(item.surcharge || 0);
 
         return {
           productId: item.productId,
           quantity,
           unitPrice,
-          total: quantity * unitPrice,
+          discount,
+          surcharge,
+          total: calculateItemTotal(item),
         };
       });
 
@@ -1000,6 +1089,8 @@ export default function OrdersPage() {
           deliveryDate,
           deliveryTime,
           deliveryAddress,
+          orderDiscount,
+          orderSurcharge,
           pickupDate: getOrderMeta(editingOrder?.id || '')?.pickupDate || '',
           returnItems: getOrderMeta(editingOrder?.id || '')?.returnItems || '',
           observation,
@@ -1019,6 +1110,8 @@ export default function OrdersPage() {
           deliveryDate,
           deliveryTime,
           deliveryAddress,
+          orderDiscount,
+          orderSurcharge,
           observation,
           pickupDate: '',
           returnItems: '',
@@ -1031,6 +1124,8 @@ export default function OrdersPage() {
           deliveryDate,
           deliveryTime,
           deliveryAddress,
+          orderDiscount,
+          orderSurcharge,
           observation,
           pickupDate: '',
           returnItems: '',
@@ -1047,6 +1142,8 @@ export default function OrdersPage() {
               deliveryDate,
               deliveryTime,
               deliveryAddress,
+              orderDiscount,
+              orderSurcharge,
               observation,
               pickupDate: '',
               returnItems: '',
@@ -1070,9 +1167,14 @@ export default function OrdersPage() {
           {
             productId: '',
             quantity: 1,
+            unitPrice: 0,
+            discount: 0,
+            surcharge: 0,
           },
         ]);
         setProductSearches(['']);
+        setOrderDiscount(0);
+        setOrderSurcharge(0);
         setQuickClientMode(false);
 
         alert('Pedido salvo offline. Quando a internet voltar, o sistema vai sincronizar.');
@@ -1095,6 +1197,8 @@ export default function OrdersPage() {
           deliveryDate,
           deliveryTime,
           deliveryAddress,
+          orderDiscount,
+          orderSurcharge,
           observation,
           stockDiscounted: hasStockAlreadyDiscounted(editingOrder, getOrderMeta(editingOrder.id)),
         });
@@ -1113,6 +1217,8 @@ export default function OrdersPage() {
             deliveryDate,
             deliveryTime,
             deliveryAddress,
+            orderDiscount,
+            orderSurcharge,
             observation,
             pickupDate: '',
             returnItems: '',
@@ -1137,9 +1243,14 @@ export default function OrdersPage() {
         {
           productId: '',
           quantity: 1,
+          unitPrice: 0,
+          discount: 0,
+          surcharge: 0,
         },
       ]);
       setProductSearches(['']);
+      setOrderDiscount(0);
+      setOrderSurcharge(0);
       setQuickClientMode(false);
 
       await loadData();
@@ -1162,6 +1273,8 @@ export default function OrdersPage() {
           deliveryDate: getOrderMeta(order.id)?.deliveryDate || '',
           deliveryTime: getOrderMeta(order.id)?.deliveryTime || '',
           deliveryAddress: getOrderMeta(order.id)?.deliveryAddress || getOrderDeliveryAddress(order, getOrderMeta(order.id)),
+          orderDiscount: getOrderMeta(order.id)?.orderDiscount || 0,
+          orderSurcharge: getOrderMeta(order.id)?.orderSurcharge || 0,
           pickupDate: extra.pickupDate || getOrderMeta(order.id)?.pickupDate || '',
           returnItems: extra.returnItems || getOrderMeta(order.id)?.returnItems || '',
           observation: extra.observation || getOrderMeta(order.id)?.observation || '',
@@ -1215,6 +1328,8 @@ export default function OrdersPage() {
           deliveryDate: getOrderMeta(deliveryOrder.id)?.deliveryDate || '',
           deliveryTime: getOrderMeta(deliveryOrder.id)?.deliveryTime || '',
           deliveryAddress: getOrderMeta(deliveryOrder.id)?.deliveryAddress || getOrderDeliveryAddress(deliveryOrder, getOrderMeta(deliveryOrder.id)),
+          orderDiscount: getOrderMeta(deliveryOrder.id)?.orderDiscount || 0,
+          orderSurcharge: getOrderMeta(deliveryOrder.id)?.orderSurcharge || 0,
           pickupDate,
           returnItems,
           observation,
@@ -1228,6 +1343,8 @@ export default function OrdersPage() {
         observation,
         deliveryTime: getOrderMeta(deliveryOrder.id)?.deliveryTime || '',
         deliveryAddress: getOrderMeta(deliveryOrder.id)?.deliveryAddress || getOrderDeliveryAddress(deliveryOrder, getOrderMeta(deliveryOrder.id)),
+        orderDiscount: getOrderMeta(deliveryOrder.id)?.orderDiscount || 0,
+        orderSurcharge: getOrderMeta(deliveryOrder.id)?.orderSurcharge || 0,
         deliveredAt: new Date().toISOString(),
         stockDiscounted: true,
       });
@@ -2169,12 +2286,15 @@ export default function OrdersPage() {
                     const isAutomaticAccessory =
                       isChopeiraProduct(product) || isCilindroProduct(product);
 
+                    const itemSubtotal = calculateItemSubtotal(item);
+                    const itemTotal = calculateItemTotal(item);
+
                     return (
                       <div
                         key={index}
                         className="rounded-2xl border border-yellow-500/10 bg-black/45 p-4"
                       >
-                        <div className="grid gap-3 md:grid-cols-[1fr_120px_120px]">
+                        <div className="grid gap-3 lg:grid-cols-[1fr_95px_130px_130px_130px_115px]">
                           <div>
                             <div className="relative mb-3">
                               <Search
@@ -2208,23 +2328,112 @@ export default function OrdersPage() {
                             </select>
                           </div>
 
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(event) =>
-                              updateItem(index, 'quantity', event.target.value)
-                            }
-                            className={inputClass}
-                          />
+                          <div>
+                            <label className="mb-2 block text-xs font-black text-zinc-400">
+                              Qtd
+                            </label>
+
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(event) =>
+                                updateItem(index, 'quantity', event.target.value)
+                              }
+                              className={inputClass}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-xs font-black text-zinc-400">
+                              Preço R$
+                            </label>
+
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPrice}
+                              onChange={(event) =>
+                                updateItem(index, 'unitPrice', event.target.value)
+                              }
+                              className={inputClass}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-xs font-black text-zinc-400">
+                              Desconto R$
+                            </label>
+
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.discount}
+                              onChange={(event) =>
+                                updateItem(index, 'discount', event.target.value)
+                              }
+                              className={inputClass}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-xs font-black text-zinc-400">
+                              Acréscimo R$
+                            </label>
+
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.surcharge}
+                              onChange={(event) =>
+                                updateItem(index, 'surcharge', event.target.value)
+                              }
+                              className={inputClass}
+                            />
+                          </div>
 
                           <button
                             type="button"
                             onClick={() => removeItem(index)}
-                            className="rounded-2xl border border-red-500/25 bg-red-500/15 font-black text-red-400 transition hover:bg-red-500 hover:text-white"
+                            className="rounded-2xl border border-red-500/25 bg-red-500/15 font-black text-red-400 transition hover:bg-red-500 hover:text-white lg:mt-6"
                           >
                             Remover
                           </button>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 md:grid-cols-3">
+                          <div className="rounded-2xl border border-yellow-500/10 bg-black/35 p-3">
+                            <p className="text-xs font-black uppercase text-zinc-500">
+                              Subtotal
+                            </p>
+
+                            <p className="mt-1 font-black text-zinc-300">
+                              {formatMoney(itemSubtotal)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-2xl border border-yellow-500/10 bg-black/35 p-3">
+                            <p className="text-xs font-black uppercase text-zinc-500">
+                              Ajuste do item
+                            </p>
+
+                            <p className="mt-1 font-black text-zinc-300">
+                              - {formatMoney(item.discount)} / + {formatMoney(item.surcharge)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-3">
+                            <p className="text-xs font-black uppercase text-yellow-400/80">
+                              Total do item
+                            </p>
+
+                            <p className="mt-1 text-xl font-black text-yellow-400">
+                              {formatMoney(itemTotal)}
+                            </p>
+                          </div>
                         </div>
 
                         {product && (
@@ -2254,13 +2463,81 @@ export default function OrdersPage() {
                 </div>
 
                 <div className="rounded-2xl border border-yellow-500/15 bg-black/45 p-5">
-                  <p className="font-bold text-zinc-400">
-                    Total do pedido
-                  </p>
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <div>
+                      <p className="text-sm font-bold text-zinc-400">
+                        Subtotal dos produtos
+                      </p>
 
-                  <p className="text-3xl font-black text-yellow-400">
-                    {formatMoney(calculateTotal())}
-                  </p>
+                      <p className="mt-1 text-xl font-black text-white">
+                        {formatMoney(calculateItemsSubtotal())}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-bold text-zinc-400">
+                        Desconto nos itens
+                      </p>
+
+                      <p className="mt-1 text-xl font-black text-red-400">
+                        {formatMoney(calculateItemsDiscount())}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-bold text-zinc-400">
+                        Acréscimo nos itens
+                      </p>
+
+                      <p className="mt-1 text-xl font-black text-green-400">
+                        {formatMoney(calculateItemsSurcharge())}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-bold text-zinc-400">
+                        Total dos itens
+                      </p>
+
+                      <p className="mt-1 text-xl font-black text-yellow-400">
+                        {formatMoney(calculateItemsTotal())}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-4 md:grid-cols-3">
+                    <Field label="Desconto geral R$">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={orderDiscount}
+                        onChange={(event) => setOrderDiscount(Number(event.target.value || 0))}
+                        className={inputClass}
+                      />
+                    </Field>
+
+                    <Field label="Acréscimo geral R$">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={orderSurcharge}
+                        onChange={(event) => setOrderSurcharge(Number(event.target.value || 0))}
+                        className={inputClass}
+                      />
+                    </Field>
+
+                    <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4">
+                      <p className="font-bold text-yellow-400/80">
+                        Total final do pedido
+                      </p>
+
+                      <p className="text-3xl font-black text-yellow-400">
+                        {formatMoney(calculateTotal())}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <button
@@ -2614,6 +2891,14 @@ export default function OrdersPage() {
                   <p className="text-xs font-bold text-zinc-500 uppercase">
                     Total do pedido
                   </p>
+
+                  {(Number(getOrderMeta(selectedOrder.id)?.orderDiscount || 0) > 0 ||
+                    Number(getOrderMeta(selectedOrder.id)?.orderSurcharge || 0) > 0) && (
+                    <div className="mb-2 text-xs text-zinc-600">
+                      <p>Desconto geral: {formatMoney(getOrderMeta(selectedOrder.id)?.orderDiscount || 0)}</p>
+                      <p>Acréscimo geral: {formatMoney(getOrderMeta(selectedOrder.id)?.orderSurcharge || 0)}</p>
+                    </div>
+                  )}
 
                   <p className="text-3xl font-black">
                     {formatMoney(selectedOrder.total)}
