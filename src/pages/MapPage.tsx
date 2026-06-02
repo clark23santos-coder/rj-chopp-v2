@@ -84,6 +84,18 @@ function getToday() {
   return new Date().toISOString().split('T')[0];
 }
 
+function addDaysToDate(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return getToday();
+  }
+
+  date.setDate(date.getDate() + days);
+
+  return date.toISOString().split('T')[0];
+}
+
 function getDateKey(value: any) {
   if (!value) {
     return '';
@@ -320,10 +332,14 @@ export default function MapPage() {
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [routeDate, setRouteDate] = useState(getToday());
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
 
   const today = getToday();
+  const tomorrow = addDaysToDate(today, 1);
+  const afterTomorrow = addDaysToDate(today, 2);
+  const routeDateIsToday = routeDate === today;
   const user = getCurrentUser();
 
   function getToken() {
@@ -361,6 +377,10 @@ export default function MapPage() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    setSelectedRouteIds([]);
+  }, [routeDate]);
+
   const locations = useMemo(() => {
     const orderLocations = orders
       .filter((order) => {
@@ -380,7 +400,15 @@ export default function MapPage() {
           getDateKey(order.deliveryDate) ||
           getDateKey(order.createdAt);
 
-        return deliveryDate === today || deliveryDate < today;
+        if (!deliveryDate) {
+          return false;
+        }
+
+        if (routeDateIsToday) {
+          return deliveryDate <= today;
+        }
+
+        return deliveryDate === routeDate;
       })
       .map((order) => {
         const meta = getOrderMeta(order.id, order);
@@ -414,7 +442,15 @@ export default function MapPage() {
 
         const pickupDate = getDateKey(withdrawal.pickupDate);
 
-        return pickupDate === today || pickupDate < today;
+        if (!pickupDate) {
+          return false;
+        }
+
+        if (routeDateIsToday) {
+          return pickupDate <= today;
+        }
+
+        return pickupDate === routeDate;
       })
       .map((withdrawal) => ({
         id: `withdrawal-${withdrawal.id}`,
@@ -436,7 +472,7 @@ export default function MapPage() {
       ...withdrawalLocations,
       ...orderLocations,
     ];
-  }, [orders, withdrawals, today]);
+  }, [orders, withdrawals, today, routeDate, routeDateIsToday]);
 
   const filteredLocations = locations.filter((location) => {
     const text = search.toLowerCase();
@@ -625,7 +661,7 @@ export default function MapPage() {
     <Layout>
       <PageHeader
         title="Mapa"
-        description="Rotas de hoje, pedidos atrasados, retiradas pendentes e rota com múltiplas paradas."
+        description="Rotas por data, pedidos agendados, retiradas pendentes e rota com múltiplas paradas."
       />
 
       <div className="mb-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
@@ -677,22 +713,73 @@ export default function MapPage() {
                 </div>
 
                 <h2 className="text-xl font-black text-yellow-400">
-                  Rotas de hoje
+                  Rotas do dia
                 </h2>
               </div>
 
               <div className="mb-4 rounded-2xl border border-yellow-500/15 bg-black/45 p-4">
                 <p className="font-bold text-zinc-400">
-                  Hoje
+                  Data da rota
                 </p>
 
-                <p className="text-2xl font-black text-yellow-400">
-                  {new Date(`${today}T12:00:00`).toLocaleDateString('pt-BR')}
+                <p className="mb-3 text-2xl font-black text-yellow-400">
+                  {formatDate(routeDate)}
+                </p>
+
+                <input
+                  type="date"
+                  value={routeDate}
+                  onChange={(event) => setRouteDate(event.target.value || today)}
+                  className={inputClass}
+                />
+
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRouteDate(today)}
+                    className={`rounded-xl border px-3 py-2 text-xs font-black transition ${
+                      routeDate === today
+                        ? 'border-yellow-400 bg-yellow-400 text-black'
+                        : 'border-yellow-500/15 bg-black/45 text-zinc-300 hover:border-yellow-400/35 hover:text-yellow-400'
+                    }`}
+                  >
+                    Hoje
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRouteDate(tomorrow)}
+                    className={`rounded-xl border px-3 py-2 text-xs font-black transition ${
+                      routeDate === tomorrow
+                        ? 'border-yellow-400 bg-yellow-400 text-black'
+                        : 'border-yellow-500/15 bg-black/45 text-zinc-300 hover:border-yellow-400/35 hover:text-yellow-400'
+                    }`}
+                  >
+                    Amanhã
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRouteDate(afterTomorrow)}
+                    className={`rounded-xl border px-3 py-2 text-xs font-black transition ${
+                      routeDate === afterTomorrow
+                        ? 'border-yellow-400 bg-yellow-400 text-black'
+                        : 'border-yellow-500/15 bg-black/45 text-zinc-300 hover:border-yellow-400/35 hover:text-yellow-400'
+                    }`}
+                  >
+                    Depois
+                  </button>
+                </div>
+
+                <p className="mt-3 text-sm text-zinc-500">
+                  {routeDateIsToday
+                    ? 'Hoje o mapa mostra entregas/retiradas de hoje e também atrasadas.'
+                    : 'Para outra data, o mapa mostra somente os pedidos e retiradas agendados para esse dia.'}
                 </p>
 
                 {user?.role === 'DELIVERY' && (
                   <p className="mt-2 text-sm text-zinc-500">
-                    Você está vendo entregas de hoje/atrasadas e retiradas de hoje/atrasadas.
+                    Você está vendo a rota da data selecionada.
                   </p>
                 )}
               </div>
@@ -807,7 +894,7 @@ export default function MapPage() {
           <PremiumPanel>
             <div className="border-b border-yellow-500/15 p-5">
               <p className="font-bold text-zinc-400">
-                {filteredLocations.length} rota(s) de hoje
+                {filteredLocations.length} rota(s) para {formatDate(routeDate)}
               </p>
             </div>
 
@@ -909,7 +996,7 @@ export default function MapPage() {
 
               {filteredLocations.length === 0 && (
                 <div className="p-5 text-zinc-500">
-                  Nenhum pedido ou retirada para hoje.
+                  Nenhum pedido ou retirada para essa data.
                 </div>
               )}
             </div>
