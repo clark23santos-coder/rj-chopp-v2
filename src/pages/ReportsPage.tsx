@@ -29,6 +29,7 @@ import PageHeader from '../components/PageHeader';
 import { api } from '../services/api';
 
 const COMPANY_SETTINGS_STORAGE_KEY = 'rjchopp_company_settings';
+const ORDER_META_STORAGE_KEY = 'rjchopp_order_meta';
 
 const defaultCompanySettings = {
   companyName: 'RJ CHOPP',
@@ -71,12 +72,54 @@ function formatMoney(value: any) {
   }).format(Number(value || 0));
 }
 
-function formatDate(value: any) {
+function parseDateValue(value: any) {
   if (!value) {
+    return null;
+  }
+
+  const text = String(value).trim();
+
+  const isoDateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+
+  if (isoDateOnly) {
+    const [, year, month, day] = isoDateOnly;
+    return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0);
+  }
+
+  const brDateOnly = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+
+  if (brDateOnly) {
+    const [, day, month, year] = brDateOnly;
+    return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0);
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatDate(value: any) {
+  const date = parseDateValue(value);
+
+  if (!date) {
     return '-';
   }
 
-  return new Date(value).toLocaleString('pt-BR');
+  return date.toLocaleString('pt-BR');
+}
+
+function formatReportDate(value: any) {
+  const date = parseDateValue(value);
+
+  if (!date) {
+    return '-';
+  }
+
+  return date.toLocaleDateString('pt-BR');
 }
 
 function formatCompactMoney(value: any) {
@@ -118,17 +161,62 @@ function getProductDisplayName(product: any) {
 }
 
 function getMonthKey(value: any) {
-  if (!value) {
-    return '';
-  }
+  const date = parseDateValue(value);
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
+  if (!date) {
     return '';
   }
 
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getNoteField(note: any, label: string) {
+  const lines = String(note || '').split('\n');
+  const found = lines.find((line) =>
+    line.toLowerCase().startsWith(label.toLowerCase())
+  );
+
+  if (!found) {
+    return '';
+  }
+
+  const value = found.slice(label.length).trim();
+
+  return value === '-' ? '' : value;
+}
+
+function getOrderReportDate(order: any) {
+  const savedMeta = readStorage(ORDER_META_STORAGE_KEY, {});
+  const metaDeliveryDate = String(savedMeta?.[order?.id]?.deliveryDate || '').trim();
+  const noteDeliveryDate = getNoteField(order?.note, 'Data de entrega:');
+  const directDeliveryDate = String(order?.deliveryDate || '').trim();
+
+  return (
+    directDeliveryDate ||
+    noteDeliveryDate ||
+    metaDeliveryDate ||
+    order?.createdAt ||
+    ''
+  );
+}
+
+function getFinancialReportDate(item: any, orders: any[]) {
+  const description = String(item?.description || '');
+  const relatedOrder = orders.find((order) => {
+    const orderId = String(order?.id || '');
+    return orderId && description.includes(orderId);
+  });
+
+  if (relatedOrder) {
+    return getOrderReportDate(relatedOrder);
+  }
+
+  return item?.createdAt || '';
+}
+
+function getDateTimestamp(value: any) {
+  const date = parseDateValue(value);
+  return date ? date.getTime() : 0;
 }
 
 function getCurrentMonthKey() {
@@ -298,12 +386,12 @@ export default function ReportsPage() {
     const months = new Set<string>();
 
     orders.forEach((order) => {
-      const key = getMonthKey(order.createdAt);
+      const key = getMonthKey(getOrderReportDate(order));
       if (key) months.add(key);
     });
 
     financial.forEach((item) => {
-      const key = getMonthKey(item.createdAt);
+      const key = getMonthKey(getFinancialReportDate(item, orders));
       if (key) months.add(key);
     });
 
@@ -317,7 +405,9 @@ export default function ReportsPage() {
       return orders;
     }
 
-    return orders.filter((order) => getMonthKey(order.createdAt) === selectedMonth);
+    return orders.filter(
+      (order) => getMonthKey(getOrderReportDate(order)) === selectedMonth
+    );
   }, [orders, selectedMonth]);
 
   const filteredFinancial = useMemo(() => {
@@ -325,8 +415,10 @@ export default function ReportsPage() {
       return financial;
     }
 
-    return financial.filter((item) => getMonthKey(item.createdAt) === selectedMonth);
-  }, [financial, selectedMonth]);
+    return financial.filter(
+      (item) => getMonthKey(getFinancialReportDate(item, orders)) === selectedMonth
+    );
+  }, [financial, orders, selectedMonth]);
 
   const totals = useMemo(() => {
     const revenue = filteredFinancial
@@ -363,7 +455,7 @@ export default function ReportsPage() {
     const map: any = {};
 
     financial.forEach((item) => {
-      const monthKey = getMonthKey(item.createdAt);
+      const monthKey = getMonthKey(getFinancialReportDate(item, orders));
 
       if (!monthKey) {
         return;
@@ -422,7 +514,7 @@ export default function ReportsPage() {
           .replace('novembro', 'nov')
           .replace('dezembro', 'dez'),
       }));
-  }, [financial]);
+  }, [financial, orders]);
 
   const soldProducts = useMemo(() => {
     const map: any = {};
@@ -514,7 +606,13 @@ export default function ReportsPage() {
     });
   }, [products]);
 
-  const recentOrders = filteredOrders.slice(0, 10);
+  const recentOrders = [...filteredOrders]
+    .sort(
+      (a, b) =>
+        getDateTimestamp(getOrderReportDate(b)) -
+        getDateTimestamp(getOrderReportDate(a))
+    )
+    .slice(0, 10);
 
   function printReport() {
     window.print();
@@ -761,6 +859,10 @@ export default function ReportsPage() {
               {getMonthName(selectedMonth)}
             </strong>
           </p>
+
+          <p className="mt-2 text-sm text-zinc-500">
+            Os pedidos e as vendas automáticas são organizados pela data de entrega informada no pedido.
+          </p>
         </PremiumPanel>
 
         <div className="mb-8 mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
@@ -1003,7 +1105,7 @@ export default function ReportsPage() {
                 <th className="p-3 border border-zinc-300">Status</th>
                 <th className="p-3 border border-zinc-300">Pagamento</th>
                 <th className="p-3 border border-zinc-300">Total</th>
-                <th className="p-3 border border-zinc-300">Data</th>
+                <th className="p-3 border border-zinc-300">Data de entrega</th>
               </tr>
             </thead>
 
@@ -1024,7 +1126,7 @@ export default function ReportsPage() {
                       {formatMoney(order.total)}
                     </td>
                     <td className="p-3 border border-zinc-300">
-                      {formatDate(order.createdAt)}
+                      {formatReportDate(getOrderReportDate(order))}
                     </td>
                   </tr>
                 ))
