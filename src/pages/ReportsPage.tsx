@@ -22,6 +22,7 @@ import {
   Users,
   Package,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 
 import Layout from '../components/Layout';
@@ -43,6 +44,86 @@ const defaultCompanySettings = {
 
 const inputClass =
   'w-full bg-black/55 border border-yellow-500/20 rounded-2xl px-4 py-3 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-black/70 focus:shadow-[0_0_28px_rgba(250,204,21,.14)]';
+
+type PrintSections = {
+  summary: boolean;
+  financial: boolean;
+  orders: boolean;
+  barrels: boolean;
+  beverages: boolean;
+  products: boolean;
+  stock: boolean;
+  expenses: boolean;
+};
+
+const DEFAULT_PRINT_SECTIONS: PrintSections = {
+  summary: true,
+  financial: true,
+  orders: true,
+  barrels: true,
+  beverages: true,
+  products: true,
+  stock: true,
+  expenses: true,
+};
+
+const EMPTY_PRINT_SECTIONS: PrintSections = {
+  summary: false,
+  financial: false,
+  orders: false,
+  barrels: false,
+  beverages: false,
+  products: false,
+  stock: false,
+  expenses: false,
+};
+
+const PRINT_SECTION_OPTIONS: Array<{
+  key: keyof PrintSections;
+  title: string;
+  description: string;
+}> = [
+  {
+    key: 'summary',
+    title: 'Resumo geral',
+    description: 'Receita, despesas, lucro, fiado, pedidos, clientes e produtos.',
+  },
+  {
+    key: 'financial',
+    title: 'Resumo financeiro',
+    description: 'Entradas, saídas e lucro estimado do período.',
+  },
+  {
+    key: 'orders',
+    title: 'Pedidos',
+    description: 'Lista dos pedidos com cliente, status, pagamento, total e entrega.',
+  },
+  {
+    key: 'barrels',
+    title: 'Barris e chopp',
+    description: 'Quantidade e valor de barris e chopp vendidos.',
+  },
+  {
+    key: 'beverages',
+    title: 'Bebidas',
+    description: 'Quantidade e valor das bebidas vendidas.',
+  },
+  {
+    key: 'products',
+    title: 'Mercadorias vendidas',
+    description: 'Todas as mercadorias, categorias, quantidades e valores.',
+  },
+  {
+    key: 'stock',
+    title: 'Estoque baixo',
+    description: 'Produtos que chegaram ao estoque mínimo.',
+  },
+  {
+    key: 'expenses',
+    title: 'Despesas detalhadas',
+    description: 'Descrição, categoria, valor e data de cada despesa.',
+  },
+];
 
 function readStorage(key: string, fallback: any) {
   try {
@@ -331,6 +412,10 @@ export default function ReportsPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
+  const [printSections, setPrintSections] = useState<PrintSections>(
+    DEFAULT_PRINT_SECTIONS
+  );
 
   const companySettings = getCompanySettings();
 
@@ -606,16 +691,136 @@ export default function ReportsPage() {
     });
   }, [products]);
 
-  const recentOrders = [...filteredOrders]
-    .sort(
-      (a, b) =>
-        getDateTimestamp(getOrderReportDate(b)) -
-        getDateTimestamp(getOrderReportDate(a))
-    )
-    .slice(0, 10);
+  const reportOrders = [...filteredOrders].sort((a, b) => {
+    const deliveryDateDifference =
+      getDateTimestamp(getOrderReportDate(a)) -
+      getDateTimestamp(getOrderReportDate(b));
+
+    if (deliveryDateDifference !== 0) {
+      return deliveryDateDifference;
+    }
+
+    return getDateTimestamp(a.createdAt) - getDateTimestamp(b.createdAt);
+  });
+
+  const activePrintSectionCount = Object.values(printSections).filter(Boolean).length;
+
+  const printContentRows =
+    (printSections.summary ? 8 : 0) +
+    (printSections.financial ? 3 : 0) +
+    (printSections.orders ? Math.max(reportOrders.length, 1) : 0) +
+    (printSections.barrels ? Math.max(barrelProducts.length, 1) : 0) +
+    (printSections.beverages ? Math.max(beverageProducts.length, 1) : 0) +
+    (printSections.products ? Math.max(soldProducts.length, 1) : 0) +
+    (printSections.stock ? Math.max(lowStockProducts.length, 1) : 0) +
+    (printSections.expenses ? Math.max(expenses.length, 1) : 0);
+
+  const printDensity =
+    printContentRows > 140 || activePrintSectionCount >= 7
+      ? 'ultra'
+      : printContentRows > 70 || activePrintSectionCount >= 4
+        ? 'compact'
+        : 'normal';
 
   function printReport() {
-    window.print();
+    setShowPrintOptions(true);
+  }
+
+  function togglePrintSection(key: keyof PrintSections) {
+    setPrintSections((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  }
+
+  function selectPrintPreset(
+    preset: 'complete' | 'orders' | 'products' | 'financial' | 'stock'
+  ) {
+    if (preset === 'complete') {
+      setPrintSections({ ...DEFAULT_PRINT_SECTIONS });
+      return;
+    }
+
+    if (preset === 'orders') {
+      setPrintSections({
+        ...EMPTY_PRINT_SECTIONS,
+        orders: true,
+      });
+      return;
+    }
+
+    if (preset === 'products') {
+      setPrintSections({
+        ...EMPTY_PRINT_SECTIONS,
+        products: true,
+      });
+      return;
+    }
+
+    if (preset === 'financial') {
+      setPrintSections({
+        ...EMPTY_PRINT_SECTIONS,
+        summary: true,
+        financial: true,
+        expenses: true,
+      });
+      return;
+    }
+
+    setPrintSections({
+      ...EMPTY_PRINT_SECTIONS,
+      stock: true,
+    });
+  }
+
+  function getPrintReportTitle() {
+    const activeSections = Object.entries(printSections)
+      .filter(([, enabled]) => enabled)
+      .map(([key]) => key);
+
+    if (activeSections.length === Object.keys(DEFAULT_PRINT_SECTIONS).length) {
+      return 'Relatório geral de vendas e operação';
+    }
+
+    if (activeSections.length === 1 && printSections.orders) {
+      return 'Relatório de pedidos';
+    }
+
+    if (activeSections.length === 1 && printSections.products) {
+      return 'Relatório de mercadorias vendidas';
+    }
+
+    if (activeSections.length === 1 && printSections.stock) {
+      return 'Relatório de estoque baixo';
+    }
+
+    if (
+      printSections.financial &&
+      !printSections.orders &&
+      !printSections.barrels &&
+      !printSections.beverages &&
+      !printSections.products &&
+      !printSections.stock
+    ) {
+      return 'Relatório financeiro';
+    }
+
+    return 'Relatório personalizado';
+  }
+
+  function confirmPrintReport() {
+    const hasSelectedSection = Object.values(printSections).some(Boolean);
+
+    if (!hasSelectedSection) {
+      alert('Escolha pelo menos uma informação para colocar no relatório.');
+      return;
+    }
+
+    setShowPrintOptions(false);
+
+    window.setTimeout(() => {
+      window.print();
+    }, 150);
   }
 
   return (
@@ -625,7 +830,7 @@ export default function ReportsPage() {
           @media print {
             @page {
               size: A4 portrait;
-              margin: 5mm;
+              margin: 4mm;
             }
 
             html,
@@ -666,9 +871,15 @@ export default function ReportsPage() {
             }
 
             #print-report {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
+              --report-font-size: 8.5px;
+              --report-table-font-size: 7.6px;
+              --report-cell-padding-y: 1.8px;
+              --report-cell-padding-x: 2.2px;
+              --report-title-size: 19px;
+              --report-section-title-size: 11px;
+              position: static !important;
+              left: auto !important;
+              top: auto !important;
               display: block !important;
               background: white !important;
               color: black !important;
@@ -676,23 +887,44 @@ export default function ReportsPage() {
               margin: 0 !important;
               width: 100% !important;
               max-width: 100% !important;
-              font-size: 8.5px !important;
+              font-size: var(--report-font-size) !important;
               line-height: 1.12 !important;
               box-shadow: none !important;
               border-radius: 0 !important;
+              overflow: visible !important;
+            }
+
+            #print-report.print-density-compact {
+              --report-font-size: 7.4px;
+              --report-table-font-size: 6.7px;
+              --report-cell-padding-y: 1.15px;
+              --report-cell-padding-x: 1.7px;
+              --report-title-size: 17px;
+              --report-section-title-size: 9.5px;
+            }
+
+            #print-report.print-density-ultra {
+              --report-font-size: 6.7px;
+              --report-table-font-size: 6.1px;
+              --report-cell-padding-y: 0.8px;
+              --report-cell-padding-x: 1.35px;
+              --report-title-size: 15.5px;
+              --report-section-title-size: 8.7px;
             }
 
             #print-report h1 {
-              font-size: 19px !important;
+              font-size: var(--report-title-size) !important;
               line-height: 1 !important;
               margin: 0 0 2px 0 !important;
               letter-spacing: 2px !important;
             }
 
             #print-report h2 {
-              font-size: 11px !important;
-              line-height: 1 !important;
+              font-size: var(--report-section-title-size) !important;
+              line-height: 1.05 !important;
               margin: 4px 0 3px 0 !important;
+              break-after: avoid-page !important;
+              page-break-after: avoid !important;
             }
 
             #print-report p {
@@ -735,7 +967,7 @@ export default function ReportsPage() {
             }
 
             #print-report table {
-              font-size: 7px !important;
+              font-size: var(--report-table-font-size) !important;
               width: 100% !important;
               max-width: 100% !important;
               border-collapse: collapse !important;
@@ -746,7 +978,7 @@ export default function ReportsPage() {
 
             #print-report th,
             #print-report td {
-              padding: 1.5px 2px !important;
+              padding: var(--report-cell-padding-y) var(--report-cell-padding-x) !important;
               border: 1px solid #999 !important;
               word-break: break-word !important;
               overflow-wrap: anywhere !important;
@@ -758,13 +990,37 @@ export default function ReportsPage() {
               font-weight: 900 !important;
             }
 
+            #print-report thead {
+              display: table-header-group !important;
+            }
+
+            #print-report tbody {
+              display: table-row-group !important;
+            }
+
             #print-report tr {
+              break-inside: avoid-page !important;
               page-break-inside: avoid !important;
+            }
+
+            #print-report .print-header {
+              break-after: avoid-page !important;
+              page-break-after: avoid !important;
             }
 
             #print-report .print-section {
               margin-top: 4px !important;
-              page-break-inside: avoid !important;
+              break-inside: auto !important;
+              page-break-inside: auto !important;
+            }
+
+            #print-report .print-section:first-of-type {
+              margin-top: 0 !important;
+            }
+
+            #print-report .print-section table {
+              break-inside: auto !important;
+              page-break-inside: auto !important;
             }
 
             #print-report .print-chart {
@@ -945,11 +1201,149 @@ export default function ReportsPage() {
             </ResponsiveContainer>
           </div>
         </PremiumPanel>
+
+        {showPrintOptions && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+            <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-yellow-500/25 bg-zinc-950 p-5 shadow-[0_0_70px_rgba(250,204,21,.18)] md:p-7">
+              <div className="flex items-start justify-between gap-4 border-b border-yellow-500/15 pb-5">
+                <div>
+                  <h2 className="text-2xl font-black text-yellow-400 md:text-3xl">
+                    Escolha o que vai aparecer no relatório
+                  </h2>
+                  <p className="mt-2 text-sm font-medium text-zinc-500">
+                    O mês continua sendo {getMonthName(selectedMonth)}. Você pode usar uma opção rápida ou montar um relatório personalizado.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPrintOptions(false)}
+                  className="rounded-2xl border border-zinc-700 bg-black/60 p-3 text-zinc-400 transition hover:border-red-500/40 hover:text-red-400"
+                  aria-label="Fechar opções de impressão"
+                >
+                  <X size={22} />
+                </button>
+              </div>
+
+              <div className="mt-5">
+                <p className="mb-3 text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
+                  Opções rápidas
+                </p>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <button
+                    type="button"
+                    onClick={() => selectPrintPreset('complete')}
+                    className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-3 text-sm font-black text-yellow-300 transition hover:border-yellow-400/50 hover:bg-yellow-500/15"
+                  >
+                    Relatório completo
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => selectPrintPreset('orders')}
+                    className="rounded-2xl border border-zinc-700 bg-black/55 px-4 py-3 text-sm font-black text-zinc-300 transition hover:border-yellow-400/40 hover:text-yellow-300"
+                  >
+                    Só pedidos
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => selectPrintPreset('products')}
+                    className="rounded-2xl border border-zinc-700 bg-black/55 px-4 py-3 text-sm font-black text-zinc-300 transition hover:border-yellow-400/40 hover:text-yellow-300"
+                  >
+                    Só mercadorias
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => selectPrintPreset('financial')}
+                    className="rounded-2xl border border-zinc-700 bg-black/55 px-4 py-3 text-sm font-black text-zinc-300 transition hover:border-yellow-400/40 hover:text-yellow-300"
+                  >
+                    Só financeiro
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => selectPrintPreset('stock')}
+                    className="rounded-2xl border border-zinc-700 bg-black/55 px-4 py-3 text-sm font-black text-zinc-300 transition hover:border-yellow-400/40 hover:text-yellow-300"
+                  >
+                    Só estoque
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
+                    Personalizar informações
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setPrintSections({ ...EMPTY_PRINT_SECTIONS })}
+                    className="text-sm font-black text-zinc-500 transition hover:text-red-400"
+                  >
+                    Limpar seleção
+                  </button>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {PRINT_SECTION_OPTIONS.map((option) => (
+                    <label
+                      key={option.key}
+                      className={`flex cursor-pointer items-start gap-4 rounded-2xl border p-4 transition ${
+                        printSections[option.key]
+                          ? 'border-yellow-400/45 bg-yellow-500/10 shadow-[0_0_24px_rgba(250,204,21,.08)]'
+                          : 'border-zinc-800 bg-black/45 hover:border-yellow-500/25'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={printSections[option.key]}
+                        onChange={() => togglePrintSection(option.key)}
+                        className="mt-1 h-5 w-5 accent-yellow-400"
+                      />
+
+                      <span>
+                        <span className="block font-black text-white">
+                          {option.title}
+                        </span>
+                        <span className="mt-1 block text-sm font-medium text-zinc-500">
+                          {option.description}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-7 flex flex-col-reverse gap-3 border-t border-yellow-500/15 pt-5 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintOptions(false)}
+                  className="rounded-2xl border border-zinc-700 bg-black/55 px-6 py-3 font-black text-zinc-300 transition hover:border-red-500/40 hover:text-red-400"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmPrintReport}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 px-7 py-3 font-black text-black shadow-[0_0_30px_rgba(250,204,21,.22)] transition hover:scale-[1.01] hover:shadow-[0_0_45px_rgba(250,204,21,.35)]"
+                >
+                  <Printer size={19} />
+                  Imprimir selecionado
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div
         id="print-report"
-        className="bg-white text-black rounded-3xl p-8"
+        className={`bg-white text-black rounded-3xl p-8 print-density-${printDensity}`}
       >
         <div className="print-header flex items-start justify-between border-b border-zinc-300 pb-3 mb-3">
           <div>
@@ -958,7 +1352,7 @@ export default function ReportsPage() {
             </h1>
 
             <p className="font-bold text-zinc-600">
-              Relatório geral de vendas e operação
+              {getPrintReportTitle()}
             </p>
 
             <p className="text-zinc-500">
@@ -989,6 +1383,8 @@ export default function ReportsPage() {
           </div>
         </div>
 
+        {printSections.summary && (
+          <>
         <div className="print-grid grid md:grid-cols-4 gap-4 mb-6">
           <div className="print-card border border-zinc-300 rounded-2xl p-4">
             <p className="print-card-title text-zinc-500 font-bold">Receita</p>
@@ -1035,6 +1431,9 @@ export default function ReportsPage() {
           </div>
         </div>
 
+          </>
+        )}
+
         <div className="print-section print-chart">
           <h2 className="text-2xl font-black mb-3">Comparativo mensal</h2>
 
@@ -1061,6 +1460,7 @@ export default function ReportsPage() {
           </table>
         </div>
 
+        {printSections.financial && (
         <div className="print-section">
           <h2 className="text-2xl font-black mb-3">Resumo financeiro</h2>
 
@@ -1094,9 +1494,11 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        )}
 
+        {printSections.orders && (
         <div className="print-section">
-          <h2 className="text-2xl font-black mb-3">Últimos pedidos do período</h2>
+          <h2 className="text-2xl font-black mb-3">Pedidos do período</h2>
 
           <table className="w-full border border-zinc-300 mb-6">
             <thead>
@@ -1110,8 +1512,8 @@ export default function ReportsPage() {
             </thead>
 
             <tbody>
-              {recentOrders.length > 0 ? (
-                recentOrders.map((order: any) => (
+              {reportOrders.length > 0 ? (
+                reportOrders.map((order: any) => (
                   <tr key={order.id}>
                     <td className="p-3 border border-zinc-300">
                       {order.client?.name || 'Cliente não informado'}
@@ -1140,7 +1542,9 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        )}
 
+        {printSections.barrels && (
         <div className="print-section">
           <h2 className="text-2xl font-black mb-3">Barris / Chopp vendidos</h2>
 
@@ -1172,7 +1576,9 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        )}
 
+        {printSections.beverages && (
         <div className="print-section">
           <h2 className="text-2xl font-black mb-3">Bebidas vendidas</h2>
 
@@ -1204,7 +1610,9 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        )}
 
+        {printSections.products && (
         <div className="print-section">
           <h2 className="text-2xl font-black mb-3">Todas as vendas por produto</h2>
 
@@ -1238,7 +1646,9 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        )}
 
+        {printSections.stock && (
         <div className="print-section">
           <h2 className="text-2xl font-black mb-3">Produtos com estoque baixo</h2>
 
@@ -1276,7 +1686,9 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        )}
 
+        {printSections.expenses && (
         <div className="print-section">
           <h2 className="text-2xl font-black mb-3">Despesas do período</h2>
 
@@ -1310,6 +1722,7 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        )}
 
         <div className="print-footer mt-5 border-t border-zinc-300 pt-3 text-zinc-500 text-sm">
           {companySettings.reportFooter || 'Relatório gerado pelo sistema RJ Chopp SGE'}
