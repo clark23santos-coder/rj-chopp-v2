@@ -19,11 +19,64 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { addAuditLog } from '../services/audit';
 import { addOfflineAction, isOnline } from '../services/offline';
+import { api } from '../services/api';
 
 const inputClass =
   'w-full bg-black/55 border border-yellow-500/20 rounded-2xl px-4 py-3 text-white outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-black/70 focus:shadow-[0_0_28px_rgba(250,204,21,.14)]';
 
 const STORAGE_KEY = 'rjchopp_withdrawals';
+
+function normalizeText(value: any) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s.-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getBarrelSize(value: any) {
+  const text = normalizeText(value);
+  const match = text.match(/(?:^|\s)(20|30|50)\s*l(?:\s|$)/i);
+  return match ? `${match[1]}L` : '';
+}
+
+function isBarrelReturnItem(item: any) {
+  const text = normalizeText(`${item?.name || ''} ${item?.category || ''}`);
+
+  if (
+    item?.kind === 'EQUIPMENT' ||
+    text.includes('chopeira') ||
+    text.includes('choperia') ||
+    text.includes('cilindro')
+  ) {
+    return false;
+  }
+
+  return (
+    item?.kind === 'BARREL' ||
+    text.includes('barril') ||
+    text.includes('chopp') ||
+    text.includes('chope') ||
+    text.includes('keg')
+  );
+}
+
+function isEquipmentReturnItem(item: any) {
+  const text = normalizeText(`${item?.name || ''} ${item?.category || ''}`);
+  return (
+    item?.kind === 'EQUIPMENT' ||
+    text.includes('chopeira') ||
+    text.includes('cilindro')
+  );
+}
+
+function clampQuantity(value: any, max: any) {
+  const quantity = Math.max(0, Math.floor(Number(value || 0)));
+  const maximum = Math.max(0, Math.floor(Number(max || 0)));
+  return Math.min(quantity, maximum);
+}
 
 function Field({ label, children }: any) {
   return (
@@ -85,6 +138,31 @@ export default function WithdrawalsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [products, setProducts] = useState<any[]>([]);
+  const [confirmingWithdrawal, setConfirmingWithdrawal] = useState<any>(null);
+  const [returnRows, setReturnRows] = useState<any[]>([]);
+  const [loadingReturn, setLoadingReturn] = useState(false);
+
+  function getToken() {
+    return localStorage.getItem('token');
+  }
+
+  function authHeaders() {
+    return {
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+      },
+    };
+  }
+
+  async function loadProducts() {
+    try {
+      const response = await api.get('/products', authHeaders());
+      setProducts(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log('Erro ao carregar produtos nas retiradas:', error);
+    }
+  }
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -96,6 +174,8 @@ export default function WithdrawalsPage() {
         setWithdrawals([]);
       }
     }
+
+    loadProducts();
   }, []);
 
   function saveToStorage(data: any[]) {
@@ -157,7 +237,7 @@ export default function WithdrawalsPage() {
     setShowModal(false);
   }
 
-  function confirmWithdrawal(id: string) {
+  function confirmLegacyWithdrawal(id: string) {
     const confirmAction = window.confirm(
       'Confirmar que essa retirada já foi feita?'
     );
@@ -199,35 +279,357 @@ export default function WithdrawalsPage() {
     });
   }
 
-  function reopenWithdrawal(id: string) {
+  function openReturnConfirmation(withdrawal: any) {
+    const structuredItems = Array.isArray(withdrawal?.items)
+      ? withdrawal.items
+      : [];
+
+    if (structuredItems.length === 0) {
+      confirmLegacyWithdrawal(withdrawal.id);
+      return;
+    }
+
+    const rows = structuredItems.map((item: any, index: number) => {
+      const quantitySent = Math.max(0, Number(item.quantitySent || 0));
+      const barrel = isBarrelReturnItem(item);
+      const equipment = isEquipmentReturnItem(item);
+
+      return {
+        ...item,
+        id: item.id || `${withdrawal.id}-${index}`,
+        quantitySent,
+        barrelSize: item.barrelSize || getBarrelSize(item.name),
+        fullReturned: 0,
+        emptyReturned: 0,
+        returnedQty: equipment
+          ? clampQuantity(item.expectedReturnQty || quantitySent, quantitySent)
+          : 0,
+        kind: barrel ? 'BARREL' : equipment ? 'EQUIPMENT' : item.kind || 'PRODUCT',
+      };
+    });
+
+    setReturnRows(rows);
+    setConfirmingWithdrawal(withdrawal);
+  }
+
+  function updateReturnRow(index: number, field: string, value: any) {
+    setReturnRows((current) =>
+      current.map((row, rowIndex) => {
+        if (rowIndex !== index) {
+          return row;
+        }
+
+        return {
+          ...row,
+          [field]: clampQuantity(value, row.quantitySent),
+        };
+      })
+    );
+  }
+
+  async function ensureCascoProduct(row: any) {
+    const size = String(row?.barrelSize || getBarrelSize(row?.name) || '').toUpperCase();
+    const originalName = String(row?.name || 'Barril').trim();
+    const cascoName = size
+      ? `Casco ${size} - ${originalName}`
+      : `Casco - ${originalName}`;
+    const targetName = normalizeText(cascoName);
+
+    const found = products.find((product) => {
+      const productName = normalizeText(product?.name || '');
+      const category = normalizeText(product?.category || '');
+      return productName === targetName || (category.includes('casco') && productName === targetName);
+    });
+
+    if (found) {
+      return found;
+    }
+
+    const response = await api.post(
+      '/products',
+      {
+        name: cascoName,
+        category: 'Casco',
+        brand: row?.brand || 'RJ Chopp',
+        unit: 'UNIDADE',
+        stock: 0,
+        minimumStock: 0,
+        costPrice: 0,
+        salePrice: 0,
+      },
+      authHeaders()
+    );
+
+    if (response.data?.id) {
+      setProducts((current) => [response.data, ...current]);
+      return response.data;
+    }
+
+    throw new Error(`Não foi possível criar o produto ${cascoName}.`);
+  }
+
+  async function addStockEntry(productId: string, quantity: number, note: string) {
+    if (!productId || quantity <= 0) {
+      return null;
+    }
+
+    await api.post(
+      '/stock-movements',
+      {
+        productId,
+        type: 'ENTRY',
+        quantity,
+        note,
+      },
+      authHeaders()
+    );
+
+    return {
+      productId,
+      quantity,
+      note,
+    };
+  }
+
+  function buildReturnedSummary(rows: any[]) {
+    const lines: string[] = [];
+
+    rows.forEach((row) => {
+      if (isBarrelReturnItem(row)) {
+        const full = Number(row.fullReturned || 0);
+        const empty = Number(row.emptyReturned || 0);
+
+        if (full > 0) {
+          lines.push(`${full}x ${row.name} CHEIO`);
+        }
+
+        if (empty > 0) {
+          const size = row.barrelSize || getBarrelSize(row.name);
+          lines.push(`${empty}x Casco ${size || row.name}`);
+        }
+
+        return;
+      }
+
+      const returned = Number(row.returnedQty || 0);
+      if (returned > 0) {
+        lines.push(`${returned}x ${row.name}`);
+      }
+    });
+
+    return lines.length > 0 ? lines.join(', ') : 'Nenhum item retornou';
+  }
+
+  async function confirmStructuredWithdrawal() {
+    if (!confirmingWithdrawal) {
+      return;
+    }
+
+    for (const row of returnRows) {
+      const sent = Number(row.quantitySent || 0);
+
+      if (isBarrelReturnItem(row)) {
+        const full = Number(row.fullReturned || 0);
+        const empty = Number(row.emptyReturned || 0);
+
+        if (full + empty > sent) {
+          alert(
+            `${row.name}: a soma de cheio + casco não pode ser maior que a quantidade enviada (${sent}).`
+          );
+          return;
+        }
+      } else if (Number(row.returnedQty || 0) > sent) {
+        alert(
+          `${row.name}: a quantidade que voltou não pode ser maior que a quantidade enviada (${sent}).`
+        );
+        return;
+      }
+    }
+
+    if (!isOnline()) {
+      alert('Conecte à internet para confirmar o recolhimento e atualizar o estoque.');
+      return;
+    }
+
     const confirmAction = window.confirm(
-      'Deseja voltar essa retirada para pendente?'
+      'Confirmar o recolhimento? As quantidades informadas serão devolvidas ao estoque.'
     );
 
     if (!confirmAction) {
       return;
     }
 
+    try {
+      setLoadingReturn(true);
+
+      const stockAdjustments: any[] = [];
+
+      for (const row of returnRows) {
+        if (isBarrelReturnItem(row)) {
+          const fullReturned = Number(row.fullReturned || 0);
+          const emptyReturned = Number(row.emptyReturned || 0);
+
+          if (fullReturned > 0 && row.productId) {
+            const adjustment = await addStockEntry(
+              row.productId,
+              fullReturned,
+              `Retorno CHEIO da retirada ${confirmingWithdrawal.id} - pedido ${confirmingWithdrawal.orderId || '-'}`
+            );
+
+            if (adjustment) {
+              stockAdjustments.push({
+                ...adjustment,
+                label: `${row.name} cheio`,
+              });
+            }
+          }
+
+          if (emptyReturned > 0) {
+            const cascoProduct = await ensureCascoProduct(row);
+
+            const adjustment = await addStockEntry(
+              cascoProduct.id,
+              emptyReturned,
+              `Entrada de casco da retirada ${confirmingWithdrawal.id} - pedido ${confirmingWithdrawal.orderId || '-'}`
+            );
+
+            if (adjustment) {
+              stockAdjustments.push({
+                ...adjustment,
+                label: cascoProduct.name,
+              });
+            }
+          }
+
+          continue;
+        }
+
+        const returnedQty = Number(row.returnedQty || 0);
+
+        if (returnedQty > 0 && row.productId) {
+          const adjustment = await addStockEntry(
+            row.productId,
+            returnedQty,
+            `Retorno da retirada ${confirmingWithdrawal.id} - pedido ${confirmingWithdrawal.orderId || '-'}`
+          );
+
+          if (adjustment) {
+            stockAdjustments.push({
+              ...adjustment,
+              label: row.name,
+            });
+          }
+        }
+      }
+
+      const returnedItems = buildReturnedSummary(returnRows);
+      const finishedAt = new Date().toISOString();
+
+      const updated = withdrawals.map((item) =>
+        item.id === confirmingWithdrawal.id
+          ? {
+              ...item,
+              status: 'RETIRADO',
+              finishedAt,
+              returnedItems,
+              returnDetails: returnRows,
+              stockReturned: true,
+              stockAdjustments,
+            }
+          : item
+      );
+
+      saveToStorage(updated);
+      await loadProducts();
+
+      addAuditLog({
+        area: 'Retiradas',
+        action: 'WITHDRAWAL_OK',
+        title: `Retirada OK: ${confirmingWithdrawal.client || 'Cliente não informado'}`,
+        description: `Retorno real: ${returnedItems}\nBuscar: ${formatDate(confirmingWithdrawal.pickupDate)}\nEstoque atualizado automaticamente.`,
+      });
+
+      setConfirmingWithdrawal(null);
+      setReturnRows([]);
+      alert('Recolhimento confirmado e estoque atualizado.');
+    } catch (error) {
+      console.log('Erro ao confirmar recolhimento:', error);
+      alert('Não foi possível confirmar o recolhimento ou atualizar o estoque.');
+    } finally {
+      setLoadingReturn(false);
+    }
+  }
+
+  async function reopenWithdrawal(id: string) {
     const currentWithdrawal = withdrawals.find((item) => item.id === id);
 
-    const updated = withdrawals.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            status: 'PENDENTE',
-            finishedAt: null,
-          }
-        : item
-    );
+    if (!currentWithdrawal) {
+      return;
+    }
 
-    saveToStorage(updated);
+    const stockAdjustments = Array.isArray(currentWithdrawal.stockAdjustments)
+      ? currentWithdrawal.stockAdjustments
+      : [];
 
-    addAuditLog({
-      area: 'Retiradas',
-      action: 'UPDATE',
-      title: `Retirada reaberta: ${currentWithdrawal?.client || 'Cliente não informado'}`,
-      description: `Itens: ${currentWithdrawal?.item || '-'}\nBuscar: ${formatDate(currentWithdrawal?.pickupDate)}`,
-    });
+    if (currentWithdrawal.stockReturned && stockAdjustments.length > 0 && !isOnline()) {
+      alert('Conecte à internet para reabrir esta retirada e estornar o estoque.');
+      return;
+    }
+
+    const message =
+      currentWithdrawal.stockReturned && stockAdjustments.length > 0
+        ? 'Deseja reabrir esta retirada? As entradas de estoque feitas no recolhimento serão estornadas.'
+        : 'Deseja voltar essa retirada para pendente?';
+
+    const confirmAction = window.confirm(message);
+
+    if (!confirmAction) {
+      return;
+    }
+
+    try {
+      if (currentWithdrawal.stockReturned && stockAdjustments.length > 0) {
+        for (const adjustment of stockAdjustments) {
+          await api.post(
+            '/stock-movements',
+            {
+              productId: adjustment.productId,
+              type: 'OUTPUT',
+              quantity: Number(adjustment.quantity || 0),
+              note: `Estorno da reabertura da retirada ${currentWithdrawal.id}`,
+            },
+            authHeaders()
+          );
+        }
+      }
+
+      const updated = withdrawals.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: 'PENDENTE',
+              finishedAt: null,
+              returnedItems: '',
+              returnDetails: null,
+              stockReturned: false,
+              stockAdjustments: [],
+            }
+          : item
+      );
+
+      saveToStorage(updated);
+      await loadProducts();
+
+      addAuditLog({
+        area: 'Retiradas',
+        action: 'UPDATE',
+        title: `Retirada reaberta: ${currentWithdrawal.client || 'Cliente não informado'}`,
+        description: `Itens: ${currentWithdrawal.item || '-'}\nBuscar: ${formatDate(currentWithdrawal.pickupDate)}`,
+      });
+    } catch (error) {
+      console.log('Erro ao reabrir retirada:', error);
+      alert('Não foi possível reabrir a retirada e estornar o estoque.');
+    }
   }
 
   function deleteWithdrawal(id: string) {
@@ -447,6 +849,12 @@ export default function WithdrawalsPage() {
                               {item.observation}
                             </p>
                           )}
+
+                          {item.status === 'RETIRADO' && item.returnedItems && (
+                            <p className="mt-2 text-xs font-black text-green-400">
+                              Voltou: {item.returnedItems}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -497,7 +905,7 @@ export default function WithdrawalsPage() {
                           </button>
                         ) : (
                           <button
-                            onClick={() => confirmWithdrawal(item.id)}
+                            onClick={() => openReturnConfirmation(item)}
                             className="flex items-center gap-2 rounded-xl border border-green-500/25 bg-green-500/15 px-4 py-3 font-black text-green-400 transition hover:bg-green-500 hover:text-white"
                           >
                             <CheckCircle size={18} />
@@ -529,6 +937,156 @@ export default function WithdrawalsPage() {
           </table>
         </div>
       </PremiumPanel>
+
+      {confirmingWithdrawal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-yellow-500/20 bg-black/95 p-6 shadow-[0_0_70px_rgba(245,158,11,.20)] custom-scrollbar md:p-8">
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(250,204,21,.13),transparent_34%),linear-gradient(135deg,rgba(255,255,255,.06),transparent_38%,rgba(250,204,21,.04))]" />
+
+            <div className="relative">
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <p className="mb-2 text-xs font-black uppercase tracking-[0.35em] text-yellow-400/80">
+                    Conferência do recolhimento
+                  </p>
+
+                  <h2 className="text-3xl font-black text-white">
+                    O que voltou de verdade?
+                  </h2>
+
+                  <p className="mt-2 text-sm font-medium text-zinc-400">
+                    Cliente: <strong className="text-white">{confirmingWithdrawal.client}</strong>
+                  </p>
+
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Informe as quantidades reais. O estoque será atualizado quando confirmar.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmingWithdrawal(null);
+                    setReturnRows([]);
+                  }}
+                  className="rounded-2xl border border-yellow-500/20 bg-black/45 p-3 text-zinc-300 transition hover:bg-yellow-400 hover:text-black"
+                >
+                  <X size={22} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {returnRows.map((row, index) => {
+                  const barrel = isBarrelReturnItem(row);
+                  const equipment = isEquipmentReturnItem(row);
+
+                  return (
+                    <div
+                      key={row.id || index}
+                      className="rounded-2xl border border-yellow-500/15 bg-black/45 p-5"
+                    >
+                      <div className="mb-4 flex flex-col justify-between gap-2 md:flex-row md:items-center">
+                        <div>
+                          <p className="font-black text-white">{row.name}</p>
+                          <p className="text-sm text-zinc-500">
+                            Enviado: {row.quantitySent} {row.unit || 'un.'}
+                          </p>
+                        </div>
+
+                        <span className={`w-fit rounded-full border px-3 py-1 text-xs font-black ${
+                          barrel
+                            ? 'border-yellow-500/25 bg-yellow-500/10 text-yellow-400'
+                            : equipment
+                              ? 'border-blue-500/25 bg-blue-500/10 text-blue-400'
+                              : 'border-zinc-500/20 bg-zinc-700/25 text-zinc-300'
+                        }`}>
+                          {barrel ? 'Barril / chopp' : equipment ? 'Equipamento' : 'Mercadoria'}
+                        </span>
+                      </div>
+
+                      {barrel ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <Field label="Voltou CHEIO">
+                            <input
+                              type="number"
+                              min="0"
+                              max={row.quantitySent}
+                              value={row.fullReturned || 0}
+                              onChange={(event) =>
+                                updateReturnRow(index, 'fullReturned', event.target.value)
+                              }
+                              className={inputClass}
+                            />
+                          </Field>
+
+                          <Field label={`Voltou CASCO VAZIO${row.barrelSize ? ` (${row.barrelSize})` : ''}`}>
+                            <input
+                              type="number"
+                              min="0"
+                              max={row.quantitySent}
+                              value={row.emptyReturned || 0}
+                              onChange={(event) =>
+                                updateReturnRow(index, 'emptyReturned', event.target.value)
+                              }
+                              className={inputClass}
+                            />
+                          </Field>
+
+                          <p className="md:col-span-2 text-xs font-bold text-zinc-500">
+                            Cheio + casco não pode passar de {row.quantitySent}.
+                          </p>
+                        </div>
+                      ) : (
+                        <Field label={equipment ? 'Quantidade recolhida' : 'Quantidade que voltou'}>
+                          <input
+                            type="number"
+                            min="0"
+                            max={row.quantitySent}
+                            value={row.returnedQty || 0}
+                            onChange={(event) =>
+                              updateReturnRow(index, 'returnedQty', event.target.value)
+                            }
+                            className={inputClass}
+                          />
+                        </Field>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-green-500/20 bg-green-500/10 p-4">
+                <p className="text-sm font-black text-green-400">
+                  Ao confirmar, barril cheio volta para o estoque do próprio produto; casco vazio entra no estoque de Casco pelo tamanho; chopeira, cilindro e outras mercadorias devolvidas voltam para seus respectivos estoques.
+                </p>
+              </div>
+
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={loadingReturn}
+                  onClick={confirmStructuredWithdrawal}
+                  className="rounded-2xl bg-gradient-to-r from-green-600 via-green-400 to-green-600 py-4 font-black text-black transition hover:scale-[1.01] disabled:opacity-50"
+                >
+                  {loadingReturn ? 'Atualizando estoque...' : 'Confirmar recolhimento'}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={loadingReturn}
+                  onClick={() => {
+                    setConfirmingWithdrawal(null);
+                    setReturnRows([]);
+                  }}
+                  className="rounded-2xl border border-yellow-500/15 bg-black/45 py-4 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">

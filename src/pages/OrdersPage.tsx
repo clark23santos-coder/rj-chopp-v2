@@ -160,6 +160,34 @@ function getStatusClass(status: string) {
   return 'border-yellow-500/25 bg-yellow-500/15 text-yellow-400';
 }
 
+function getBackendOrderStatus(status: string) {
+  const value = String(status || '').toUpperCase();
+
+  if (value === 'APPROVED') {
+    return 'ENTREGUE';
+  }
+
+  if (value === 'FINISHED') {
+    return 'FINALIZADO';
+  }
+
+  if (value === 'CANCELLED' || value === 'CANCELED') {
+    return 'CANCELADO';
+  }
+
+  return status;
+}
+
+function isDeliveredOrInWithdrawal(order: any, meta: any) {
+  const status = String(order?.status || '').toUpperCase();
+
+  return (
+    status === 'APPROVED' ||
+    Boolean(meta?.deliveredAt) ||
+    Boolean(meta?.pickupDate && meta?.returnItems)
+  );
+}
+
 function buildOrderNote(data: any) {
   const deliveryDate = data.deliveryDate || '';
   const deliveryTime = data.deliveryTime || '';
@@ -261,6 +289,15 @@ function isAccessoryProduct(product: any) {
   );
 }
 
+function isCascoProduct(product: any) {
+  const text = `${product?.name || ''} ${product?.category || ''} ${product?.brand || ''}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return text.includes('casco');
+}
+
 function sortProductsAlphabetically(products: any[]) {
   return [...products].sort((a, b) => {
     const nameA = getProductDisplayName(a).toLowerCase();
@@ -318,7 +355,7 @@ function getProductsForOrderSelect(
         return true;
       }
 
-      if (isAccessoryProduct(product)) {
+      if (isAccessoryProduct(product) || isCascoProduct(product)) {
         return false;
       }
 
@@ -443,6 +480,65 @@ function getOrderDeliveryTime(order: any, meta: any = {}) {
   ).trim();
 }
 
+function getBarrelSize(product: any) {
+  const text = normalizeSearchText(
+    `${product?.name || ''} ${product?.category || ''} ${product?.brand || ''}`
+  );
+
+  const match = text.match(/(?:^|\s)(20|30|50)\s*l(?:\s|$)/i);
+
+  if (match) {
+    return `${match[1]}L`;
+  }
+
+  if (text.includes('30l')) return '30L';
+  if (text.includes('50l')) return '50L';
+  if (text.includes('20l')) return '20L';
+
+  return '';
+}
+
+function buildWithdrawalPlan(order: any, products: any[]) {
+  return (order?.items || []).map((item: any, index: number) => {
+    const product =
+      item.product ||
+      products.find((productItem) => productItem.id === item.productId);
+
+    const quantity = Number(item.quantity || 0);
+    const equipment = isChopeiraProduct(product) || isCilindroProduct(product);
+    const barrel = !equipment && isChoppOrBarrelProduct(product);
+
+    return {
+      id: item.id || `${item.productId || 'item'}-${index}`,
+      productId: item.productId || product?.id || '',
+      name: getProductDisplayName(product),
+      quantitySent: quantity,
+      expectedReturnQty: barrel || equipment ? quantity : 0,
+      kind: barrel ? 'BARREL' : equipment ? 'EQUIPMENT' : 'PRODUCT',
+      barrelSize: barrel ? getBarrelSize(product) : '',
+      category: product?.category || '',
+      brand: product?.brand || '',
+      unit: product?.unit || '',
+    };
+  });
+}
+
+function buildWithdrawalPlanSummary(plan: any[]) {
+  const expected = plan
+    .filter((item) => Number(item.expectedReturnQty || 0) > 0)
+    .map((item) => `${Number(item.expectedReturnQty || 0)}x ${item.name}`);
+
+  if (expected.length > 0) {
+    return expected.join(', ');
+  }
+
+  if (plan.length > 0) {
+    return 'Conferir itens do pedido no recolhimento';
+  }
+
+  return 'Sem itens automáticos para recolher';
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -460,6 +556,9 @@ export default function OrdersPage() {
 
   const [loading, setLoading] = useState(false);
   const [quickClientMode, setQuickClientMode] = useState(false);
+  const [clientSearch, setClientSearch] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState('');
+  const [returnPlan, setReturnPlan] = useState<any[]>([]);
   const [productSearches, setProductSearches] = useState(['']);
   const [orderDiscount, setOrderDiscount] = useState(0);
   const [orderSurcharge, setOrderSurcharge] = useState(0);
@@ -555,6 +654,8 @@ export default function OrdersPage() {
   function openNewOrder() {
     setEditingOrder(null);
     setQuickClientMode(false);
+    setClientSearch('');
+    setSelectedClientId('');
     setProductSearches(['']);
     setOrderDiscount(0);
     setOrderSurcharge(0);
@@ -605,15 +706,46 @@ export default function OrdersPage() {
     setOrderDiscount(Number(meta.orderDiscount || 0));
     setOrderSurcharge(Number(meta.orderSurcharge || 0));
     setQuickClientMode(false);
+    setSelectedClientId(order.clientId || order.client?.id || '');
+    setClientSearch(order.client?.name || '');
     setShowModal(true);
   }
 
   const today = getToday();
 
+  const filteredClientOptions = useMemo(() => {
+    const searchText = normalizeSearchText(clientSearch);
+
+    if (!searchText) {
+      return [];
+    }
+
+    return clients
+      .filter((client) => {
+        const clientText = normalizeSearchText(
+          `${client?.name || ''} ${client?.phone || ''} ${client?.address || ''}`
+        );
+
+        return searchText
+          .split(' ')
+          .filter(Boolean)
+          .every((term) => clientText.includes(term));
+      })
+      .sort((a, b) =>
+        String(a?.name || '').localeCompare(String(b?.name || ''), 'pt-BR')
+      )
+      .slice(0, 10);
+  }, [clients, clientSearch]);
+
+  const selectedClient = useMemo(() => {
+    return clients.find((client) => client.id === selectedClientId) || null;
+  }, [clients, selectedClientId]);
+
   const filteredOrders = orders.filter((order) => {
     const meta = getOrderMeta(order.id);
     const text = search.toLowerCase();
     const orderStatus = String(order.status || '').toUpperCase();
+    const deliveredOrInWithdrawal = isDeliveredOrInWithdrawal(order, meta);
 
     const matchesSearch =
       !text ||
@@ -650,7 +782,7 @@ export default function OrdersPage() {
       !statusFilter &&
       !returnFilter &&
       !text &&
-      orderStatus === 'APPROVED';
+      deliveredOrInWithdrawal;
 
     if (shouldHideDeliveredFromOrders) {
       return false;
@@ -719,8 +851,8 @@ export default function OrdersPage() {
     }).length;
 
     const delivered = filteredOrders.filter((order) => {
-      const status = String(order.status || '').toUpperCase();
-      return status === 'APPROVED';
+      const meta = getOrderMeta(order.id);
+      return isDeliveredOrInWithdrawal(order, meta);
     }).length;
 
     const late = filteredOrders.filter((order) => {
@@ -1176,6 +1308,8 @@ export default function OrdersPage() {
         setOrderDiscount(0);
         setOrderSurcharge(0);
         setQuickClientMode(false);
+        setClientSearch('');
+        setSelectedClientId('');
 
         alert('Pedido salvo offline. Quando a internet voltar, o sistema vai sincronizar.');
         return;
@@ -1252,6 +1386,8 @@ export default function OrdersPage() {
       setOrderDiscount(0);
       setOrderSurcharge(0);
       setQuickClientMode(false);
+      setClientSearch('');
+      setSelectedClientId('');
 
       await loadData();
     } catch (error) {
@@ -1263,30 +1399,67 @@ export default function OrdersPage() {
   }
 
   async function updateOrderStatus(order: any, status: string, extra: any = {}) {
-    await api.put(
+    const meta = getOrderMeta(order.id);
+    const nextStatus = String(status || '').toUpperCase();
+    const note = buildOrderNote({
+      deliveryDate: meta?.deliveryDate || '',
+      deliveryTime: meta?.deliveryTime || '',
+      deliveryAddress: meta?.deliveryAddress || getOrderDeliveryAddress(order, meta),
+      orderDiscount: meta?.orderDiscount || 0,
+      orderSurcharge: meta?.orderSurcharge || 0,
+      pickupDate: extra.pickupDate || meta?.pickupDate || '',
+      returnItems: extra.returnItems || meta?.returnItems || '',
+      observation: extra.observation || meta?.observation || '',
+    });
+
+    const response = await api.put(
       `/orders/${order.id}`,
       {
-        status,
+        status: getBackendOrderStatus(nextStatus),
         paymentMethod: order.paymentMethod || '',
         total: Number(order.total || 0),
-        note: buildOrderNote({
-          deliveryDate: getOrderMeta(order.id)?.deliveryDate || '',
-          deliveryTime: getOrderMeta(order.id)?.deliveryTime || '',
-          deliveryAddress: getOrderMeta(order.id)?.deliveryAddress || getOrderDeliveryAddress(order, getOrderMeta(order.id)),
-          orderDiscount: getOrderMeta(order.id)?.orderDiscount || 0,
-          orderSurcharge: getOrderMeta(order.id)?.orderSurcharge || 0,
-          pickupDate: extra.pickupDate || getOrderMeta(order.id)?.pickupDate || '',
-          returnItems: extra.returnItems || getOrderMeta(order.id)?.returnItems || '',
-          observation: extra.observation || getOrderMeta(order.id)?.observation || '',
-        }),
+        note,
         discountStockNow: extra.discountStockNow === true,
       },
       authHeaders()
     );
+
+    setOrders((current) =>
+      current.map((item) =>
+        item.id === order.id
+          ? {
+              ...item,
+              ...(response.data || {}),
+              status: nextStatus,
+              note,
+              stockDiscounted:
+                extra.discountStockNow === true ||
+                item.stockDiscounted === true ||
+                response.data?.stockDiscounted === true,
+            }
+          : item
+      )
+    );
+
+    return response.data;
   }
 
   function openDeliveryModal(order: any) {
     setDeliveryOrder(order);
+    setReturnPlan(buildWithdrawalPlan(order, products));
+  }
+
+  function updateReturnPlanQuantity(index: number, value: any) {
+    setReturnPlan((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              expectedReturnQty: Math.max(0, Number(value || 0)),
+            }
+          : item
+      )
+    );
   }
 
   async function confirmDelivered(event: any) {
@@ -1302,16 +1475,11 @@ export default function OrdersPage() {
       const form = new FormData(event.currentTarget);
 
       const pickupDate = String(form.get('pickupDate') || '');
-      const returnItems = String(form.get('returnItems') || '');
       const observation = String(form.get('observation') || '');
+      const returnItems = buildWithdrawalPlanSummary(returnPlan);
 
       if (!pickupDate) {
         alert('Coloque a data para buscar de volta.');
-        return;
-      }
-
-      if (!returnItems.trim()) {
-        alert('Coloque o que precisa buscar de volta.');
         return;
       }
 
@@ -1345,6 +1513,7 @@ export default function OrdersPage() {
         deliveryAddress: getOrderMeta(deliveryOrder.id)?.deliveryAddress || getOrderDeliveryAddress(deliveryOrder, getOrderMeta(deliveryOrder.id)),
         orderDiscount: getOrderMeta(deliveryOrder.id)?.orderDiscount || 0,
         orderSurcharge: getOrderMeta(deliveryOrder.id)?.orderSurcharge || 0,
+        returnPlan,
         deliveredAt: new Date().toISOString(),
         stockDiscounted: true,
       });
@@ -1358,6 +1527,8 @@ export default function OrdersPage() {
         phone: deliveryOrder.client?.phone || '',
         address: getOrderMeta(deliveryOrder.id)?.deliveryAddress || getOrderDeliveryAddress(deliveryOrder, getOrderMeta(deliveryOrder.id)),
         item: returnItems,
+        items: returnPlan.map((item) => ({ ...item })),
+        source: 'ORDER',
         deliveryDate: getOrderMeta(deliveryOrder.id)?.deliveryDate || '',
         deliveryTime: getOrderMeta(deliveryOrder.id)?.deliveryTime || '',
         pickupDate,
@@ -1416,6 +1587,7 @@ export default function OrdersPage() {
         );
 
         setDeliveryOrder(null);
+        setReturnPlan([]);
 
         addAuditLog({
           area: 'Pedidos',
@@ -1435,7 +1607,20 @@ export default function OrdersPage() {
         discountStockNow: !stockWasAlreadyDiscounted,
       });
 
+      setOrders((current) =>
+        current.map((item) =>
+          item.id === deliveryOrder.id
+            ? {
+                ...item,
+                status: 'APPROVED',
+                stockDiscounted: true,
+              }
+            : item
+        )
+      );
+
       setDeliveryOrder(null);
+      setReturnPlan([]);
 
       await loadData();
 
@@ -1567,18 +1752,145 @@ export default function OrdersPage() {
     }
   }
 
-  function printDeliveryNote() {
-    window.print();
+  function resetDeliveryNotePrintFit() {
+    document.documentElement.style.removeProperty('--delivery-note-print-scale');
+    document.body.classList.remove('delivery-note-fit-measuring');
   }
+
+  async function fitDeliveryNoteToOnePage() {
+    const wrapper = document.getElementById('delivery-note-print-wrapper');
+    const note = document.getElementById('delivery-note-print');
+
+    if (!wrapper || !note) {
+      return;
+    }
+
+    document.documentElement.style.setProperty('--delivery-note-print-scale', '1');
+    document.body.classList.add('delivery-note-fit-measuring');
+
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+
+    const availableWidth = wrapper.clientWidth || 740;
+    const availableHeight = wrapper.clientHeight || 1070;
+
+    const noteBox = note.getBoundingClientRect();
+    const noteWidth = Math.max(note.scrollWidth || 0, noteBox.width || 0, availableWidth);
+    const noteHeight = Math.max(note.scrollHeight || 0, noteBox.height || 0, availableHeight);
+
+    const widthScale = availableWidth / noteWidth;
+    const heightScale = availableHeight / noteHeight;
+    const rawScale = Math.min(1, widthScale, heightScale);
+    const safeScale = Math.max(0.35, Math.floor(rawScale * 1000) / 1000);
+
+    document.documentElement.style.setProperty('--delivery-note-print-scale', String(safeScale));
+    document.body.classList.remove('delivery-note-fit-measuring');
+  }
+
+  async function printDeliveryNote() {
+    await fitDeliveryNoteToOnePage();
+
+    setTimeout(() => {
+      window.print();
+    }, 120);
+  }
+
+  useEffect(() => {
+    window.addEventListener('afterprint', resetDeliveryNotePrintFit);
+
+    return () => {
+      window.removeEventListener('afterprint', resetDeliveryNotePrintFit);
+      resetDeliveryNotePrintFit();
+    };
+  }, []);
 
   return (
     <Layout>
       <style>
         {`
+          :root {
+            --delivery-note-print-scale: 1;
+          }
+
+          body.delivery-note-fit-measuring {
+            overflow: hidden !important;
+          }
+
+          body.delivery-note-fit-measuring #delivery-note-print-wrapper {
+            position: fixed !important;
+            left: -100000px !important;
+            top: 0 !important;
+            width: 196mm !important;
+            height: 283mm !important;
+            min-height: 283mm !important;
+            background: white !important;
+            color: black !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+            overflow: hidden !important;
+          }
+
+          body.delivery-note-fit-measuring #delivery-note-print-card {
+            position: static !important;
+            width: 196mm !important;
+            height: 283mm !important;
+            max-width: none !important;
+            max-height: none !important;
+            overflow: visible !important;
+            background: white !important;
+            color: black !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            border: none !important;
+            display: block !important;
+          }
+
+          body.delivery-note-fit-measuring #delivery-note-print {
+            display: block !important;
+            background: white !important;
+            color: black !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 196mm !important;
+            font-size: 10px !important;
+            line-height: 1.12 !important;
+          }
+
+          body.delivery-note-fit-measuring #delivery-note-print table,
+          body.delivery-note-fit-measuring #delivery-note-print th,
+          body.delivery-note-fit-measuring #delivery-note-print td {
+            border-collapse: collapse !important;
+          }
+
+          body.delivery-note-fit-measuring #delivery-note-print th,
+          body.delivery-note-fit-measuring #delivery-note-print td {
+            padding: 4px 5px !important;
+          }
+
+          body.delivery-note-fit-measuring #delivery-note-print h1 {
+            font-size: 25px !important;
+            margin: 0 0 2px 0 !important;
+          }
+
+          body.delivery-note-fit-measuring #delivery-note-print h2 {
+            font-size: 13px !important;
+            margin: 0 0 4px 0 !important;
+          }
+
+          body.delivery-note-fit-measuring #delivery-note-print p {
+            margin: 0 !important;
+          }
+
           @media print {
             @page {
               size: A4;
-              margin: 10mm;
+              margin: 7mm;
             }
 
             body {
@@ -1598,25 +1910,36 @@ export default function OrdersPage() {
               visibility: visible !important;
             }
 
+            html,
+            body {
+              width: 210mm !important;
+              height: 297mm !important;
+              overflow: hidden !important;
+            }
+
             #delivery-note-print-wrapper {
               position: absolute !important;
               left: 0 !important;
               top: 0 !important;
-              width: 100% !important;
-              min-height: auto !important;
+              width: 196mm !important;
+              height: 283mm !important;
+              min-height: 283mm !important;
+              max-height: 283mm !important;
               background: white !important;
               color: black !important;
               padding: 0 !important;
               margin: 0 !important;
               display: block !important;
+              overflow: hidden !important;
             }
 
             #delivery-note-print-card {
               position: static !important;
-              width: 100% !important;
+              width: 196mm !important;
+              height: 283mm !important;
               max-width: none !important;
-              max-height: none !important;
-              overflow: visible !important;
+              max-height: 283mm !important;
+              overflow: hidden !important;
               background: white !important;
               color: black !important;
               padding: 0 !important;
@@ -1633,9 +1956,49 @@ export default function OrdersPage() {
               color: black !important;
               padding: 0 !important;
               margin: 0 !important;
-              width: 100% !important;
-              font-size: 11px !important;
-              line-height: 1.25 !important;
+              width: calc(196mm / var(--delivery-note-print-scale, 1)) !important;
+              max-width: none !important;
+              font-size: 10px !important;
+              line-height: 1.12 !important;
+              transform: scale(var(--delivery-note-print-scale, 1)) !important;
+              transform-origin: top left !important;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+            }
+
+            #delivery-note-print [class*="p-4"] {
+              padding: 8px !important;
+            }
+
+            #delivery-note-print [class*="p-3"] {
+              padding: 4px !important;
+            }
+
+            #delivery-note-print [class*="pb-4"] {
+              padding-bottom: 8px !important;
+            }
+
+            #delivery-note-print [class*="mb-5"],
+            #delivery-note-print [class*="mb-4"],
+            #delivery-note-print [class*="mb-3"] {
+              margin-bottom: 8px !important;
+            }
+
+            #delivery-note-print [class*="mt-8"],
+            #delivery-note-print [class*="mt-6"] {
+              margin-top: 12px !important;
+            }
+
+            #delivery-note-print [class*="mb-10"] {
+              margin-bottom: 24px !important;
+            }
+
+            #delivery-note-print [class*="min-h-"] {
+              min-height: auto !important;
+            }
+
+            #delivery-note-print [class*="rounded-2xl"] {
+              border-radius: 8px !important;
             }
 
             #delivery-note-print table {
@@ -1646,21 +2009,31 @@ export default function OrdersPage() {
             #delivery-note-print th,
             #delivery-note-print td {
               border: 1px solid #999 !important;
-              padding: 6px !important;
+              padding: 4px 5px !important;
             }
 
             #delivery-note-print h1 {
-              font-size: 30px !important;
-              margin: 0 0 3px 0 !important;
+              font-size: 25px !important;
+              margin: 0 0 2px 0 !important;
             }
 
             #delivery-note-print h2 {
-              font-size: 15px !important;
-              margin: 0 0 6px 0 !important;
+              font-size: 13px !important;
+              margin: 0 0 4px 0 !important;
             }
 
             #delivery-note-print p {
               margin: 0 !important;
+            }
+
+            #delivery-note-print .print-avoid-break {
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            #delivery-note-print .print-no-break-before {
+              break-before: avoid !important;
+              page-break-before: avoid !important;
             }
 
             .no-print,
@@ -1827,6 +2200,7 @@ export default function OrdersPage() {
                   const meta = getOrderMeta(order.id);
                   const status = String(order.status || '').toUpperCase();
                   const lateScheduledOrder = isLateScheduledOrder(order, meta, today);
+                  const deliveredOrInWithdrawal = isDeliveredOrInWithdrawal(order, meta);
 
                   return (
                     <tr
@@ -1938,9 +2312,9 @@ export default function OrdersPage() {
                           </span>
                         ) : (
                           <span
-                            className={`${getStatusClass(order.status)} inline-flex rounded-full border px-4 py-2 text-sm font-black`}
+                            className={`${getStatusClass(deliveredOrInWithdrawal ? 'APPROVED' : order.status)} inline-flex rounded-full border px-4 py-2 text-sm font-black`}
                           >
-                            {getStatusLabel(order.status)}
+                            {getStatusLabel(deliveredOrInWithdrawal ? 'APPROVED' : order.status)}
                           </span>
                         )}
                       </td>
@@ -1980,7 +2354,7 @@ export default function OrdersPage() {
                             Editar
                           </button>
 
-                          {status !== 'APPROVED' && status !== 'FINISHED' && (
+                          {!deliveredOrInWithdrawal && status !== 'FINISHED' && (
                             <button
                               disabled={order.offlinePending}
                               onClick={() => openDeliveryModal(order)}
@@ -1991,7 +2365,7 @@ export default function OrdersPage() {
                             </button>
                           )}
 
-                          {status === 'APPROVED' && (
+                          {deliveredOrInWithdrawal && status !== 'FINISHED' && (
                             <button
                               onClick={() => finalizeOrder(order)}
                               className="flex items-center gap-2 rounded-xl border border-green-500/25 bg-green-500/15 px-3 py-2 text-sm font-black text-green-400 transition hover:bg-green-500 hover:text-white"
@@ -2060,6 +2434,8 @@ export default function OrdersPage() {
                     setShowModal(false);
                     setEditingOrder(null);
                     setQuickClientMode(false);
+                    setClientSearch('');
+                    setSelectedClientId('');
                   }}
                   className="rounded-2xl border border-yellow-500/20 bg-black/45 p-3 text-zinc-300 transition hover:bg-yellow-400 hover:text-black"
                 >
@@ -2070,27 +2446,96 @@ export default function OrdersPage() {
               <form onSubmit={saveOrder} className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Cliente">
-                    <select
+                    <input
+                      type="hidden"
                       name="clientId"
-                      defaultValue={editingOrder?.clientId || editingOrder?.client?.id || ''}
-                      className={inputClass}
-                    >
-                      <option value="">Selecione um cliente</option>
+                      value={selectedClientId}
+                    />
 
-                      {clients.map((client) => (
-                        <option key={client.id} value={client.id}>
-                          {client.name} - {client.phone}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <Search
+                        size={18}
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400"
+                      />
 
-                    {!editingOrder && (
+                      <input
+                        value={clientSearch}
+                        onChange={(event) => {
+                          setClientSearch(event.target.value);
+                          setSelectedClientId('');
+                          setQuickClientMode(false);
+                        }}
+                        placeholder="Digite o nome, telefone ou endereço do cliente..."
+                        autoComplete="off"
+                        className={`${inputClass} pl-11`}
+                      />
+                    </div>
+
+                    {selectedClient && (
+                      <div className="mt-2 rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3">
+                        <p className="font-black text-green-400">
+                          ✓ {selectedClient.name}
+                        </p>
+                        <p className="text-xs text-zinc-400">
+                          {selectedClient.phone || 'Sem telefone'}
+                          {selectedClient.address ? ` • ${selectedClient.address}` : ''}
+                        </p>
+                      </div>
+                    )}
+
+                    {!selectedClientId && clientSearch.trim() && !quickClientMode && (
+                      <div className="mt-2 overflow-hidden rounded-2xl border border-yellow-500/15 bg-black/90 shadow-2xl">
+                        {filteredClientOptions.length > 0 ? (
+                          <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                            {filteredClientOptions.map((client) => (
+                              <button
+                                key={client.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedClientId(client.id);
+                                  setClientSearch(client.name || '');
+                                  setQuickClientMode(false);
+                                }}
+                                className="block w-full border-b border-yellow-500/10 px-4 py-3 text-left transition last:border-b-0 hover:bg-yellow-400/10"
+                              >
+                                <p className="font-black text-white">{client.name}</p>
+                                <p className="text-xs text-zinc-400">
+                                  {client.phone || 'Sem telefone'}
+                                  {client.address ? ` • ${client.address}` : ''}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-4">
+                            <p className="font-black text-red-400">
+                              Cliente não encontrado
+                            </p>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              Confira o nome ou crie esse cliente rapidamente.
+                            </p>
+
+                            {!editingOrder && (
+                              <button
+                                type="button"
+                                onClick={() => setQuickClientMode(true)}
+                                className="mt-3 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-2 text-sm font-black text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+                              >
+                                + Criar cliente rápido
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {quickClientMode && !editingOrder && (
                       <button
                         type="button"
-                        onClick={() => setQuickClientMode((current) => !current)}
-                        className="mt-3 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-2 text-sm font-black text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+                        onClick={() => setQuickClientMode(false)}
+                        className="mt-3 rounded-xl border border-zinc-500/20 bg-zinc-800/60 px-4 py-2 text-sm font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
                       >
-                        {quickClientMode ? 'Usar cliente já cadastrado' : '+ Criar cliente rápido'}
+                        Voltar para pesquisa de cliente
                       </button>
                     )}
                   </Field>
@@ -2189,6 +2634,7 @@ export default function OrdersPage() {
                         <input
                           name="quickClientName"
                           placeholder="Nome do cliente"
+                          defaultValue={clientSearch}
                           className={inputClass}
                         />
                       </Field>
@@ -2553,6 +2999,8 @@ export default function OrdersPage() {
                     setShowModal(false);
                     setEditingOrder(null);
                     setQuickClientMode(false);
+                    setClientSearch('');
+                    setSelectedClientId('');
                   }}
                   className="w-full rounded-2xl border border-yellow-500/15 bg-black/45 py-4 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
                 >
@@ -2614,13 +3062,56 @@ export default function OrdersPage() {
                   />
                 </Field>
 
-                <Field label="Itens para buscar">
-                  <textarea
-                    name="returnItems"
-                    placeholder="O que precisa buscar? Ex: 1 chopeira, 2 barris, cascos..."
-                    defaultValue={getOrderMeta(deliveryOrder.id)?.returnItems || ''}
-                    className={`${inputClass} min-h-[100px] resize-none`}
-                  />
+                <Field label="Itens identificados automaticamente para recolhimento">
+                  <div className="space-y-3">
+                    {returnPlan.map((item, index) => (
+                      <div
+                        key={item.id || `${item.productId}-${index}`}
+                        className="rounded-2xl border border-yellow-500/15 bg-black/45 p-4"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="font-black text-white">{item.name}</p>
+                            <p className="text-xs text-zinc-500">
+                              Enviado no pedido: {item.quantitySent}
+                              {item.kind === 'BARREL' && item.barrelSize
+                                ? ` • Barril ${item.barrelSize}`
+                                : item.kind === 'EQUIPMENT'
+                                  ? ' • Equipamento'
+                                  : ' • Produto / bebida'}
+                            </p>
+                          </div>
+
+                          <div className="w-full sm:w-40">
+                            <label className="mb-1 block text-xs font-black text-yellow-200">
+                              Previsto recolher
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max={Math.max(0, Number(item.quantitySent || 0))}
+                              step="1"
+                              value={item.expectedReturnQty}
+                              onChange={(event) =>
+                                updateReturnPlanQuantity(index, event.target.value)
+                              }
+                              className={inputClass}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {returnPlan.length === 0 && (
+                      <div className="rounded-2xl border border-zinc-500/20 bg-zinc-800/40 p-4 text-sm text-zinc-400">
+                        Nenhum item foi identificado no pedido.
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="mt-3 text-sm text-zinc-500">
+                    Barris, chopeira e cilindro já entram automaticamente. Outros produtos, como refrigerante, também aparecem e podem ser ajustados. Na retirada você informa exatamente o que voltou cheio, vazio ou devolvido.
+                  </p>
                 </Field>
 
                 <Field label="Observação">
@@ -2641,7 +3132,10 @@ export default function OrdersPage() {
 
                 <button
                   type="button"
-                  onClick={() => setDeliveryOrder(null)}
+                  onClick={() => {
+                    setDeliveryOrder(null);
+                    setReturnPlan([]);
+                  }}
                   className="w-full rounded-2xl border border-yellow-500/15 bg-black/45 py-4 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
                 >
                   Cancelar
@@ -2662,7 +3156,7 @@ export default function OrdersPage() {
             className="w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-white text-black rounded-3xl p-8"
           >
             <div id="delivery-note-print">
-              <div className="border-b-4 border-black pb-5 mb-5">
+              <div className="border-b-4 border-black pb-4 mb-4 print-avoid-break">
                 <div className="flex items-start justify-between gap-6">
                   <div>
                     <h1 className="text-5xl font-black tracking-tight">
@@ -2707,7 +3201,7 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-5">
+              <div className="grid grid-cols-2 gap-4 mb-4 print-avoid-break">
                 <div className="border border-zinc-300 rounded-2xl p-4">
                   <h2 className="text-lg font-black mb-3">
                     Dados do cliente
@@ -2864,32 +3358,10 @@ export default function OrdersPage() {
                 </table>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-5">
-                <div className="border border-zinc-300 rounded-2xl p-4 min-h-[120px]">
-                  <h2 className="text-lg font-black mb-2">
-                    Itens para buscar de volta
-                  </h2>
-
-                  <p className="whitespace-pre-wrap">
-                    {getOrderMeta(selectedOrder.id)?.returnItems || '-'}
-                  </p>
-                </div>
-
-                <div className="border border-zinc-300 rounded-2xl p-4 min-h-[120px]">
-                  <h2 className="text-lg font-black mb-2">
-                    Observação
-                  </h2>
-
-                  <p className="whitespace-pre-wrap">
-                    {getOrderMeta(selectedOrder.id)?.observation || selectedOrder.note || '-'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end mb-8">
-                <div className="border-2 border-black rounded-2xl p-5 min-w-[260px] text-right">
+              <div className="flex justify-end mb-4 print-avoid-break print-no-break-before">
+                <div className="border-2 border-black rounded-2xl p-4 min-w-[280px] text-right bg-zinc-50">
                   <p className="text-xs font-bold text-zinc-500 uppercase">
-                    Total do pedido
+                    Total final do pedido
                   </p>
 
                   {(Number(getOrderMeta(selectedOrder.id)?.orderDiscount || 0) > 0 ||
@@ -2906,7 +3378,30 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-10 mt-12">
+              <div className="grid grid-cols-2 gap-4 mb-4 print-avoid-break">
+                <div className="border border-zinc-300 rounded-2xl p-4 min-h-[120px]">
+                  <h2 className="text-lg font-black mb-2">
+                    Itens para buscar de volta
+                  </h2>
+
+                  <p className="whitespace-pre-wrap">
+                    {getOrderMeta(selectedOrder.id)?.returnItems || '-'}
+                  </p>
+                </div>
+
+                <div className="border border-zinc-300 rounded-2xl p-4 min-h-[120px]">
+                  <h2 className="text-lg font-black mb-2">
+                    Observação
+                  </h2>
+
+                  <p className="whitespace-pre-wrap">
+                    {getOrderMeta(selectedOrder.id)?.observation || '-'}
+                  </p>
+                </div>
+              </div>
+
+
+              <div className="grid grid-cols-2 gap-10 mt-8 print-avoid-break">
                 <div>
                   <p className="text-sm text-zinc-500 mb-10">
                     Assinatura do cliente
