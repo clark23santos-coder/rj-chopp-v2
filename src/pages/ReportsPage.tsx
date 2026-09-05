@@ -300,6 +300,27 @@ function getDateTimestamp(value: any) {
   return date ? date.getTime() : 0;
 }
 
+function isDateInsideRange(value: any, startDate: string, endDate: string) {
+  const timestamp = getDateTimestamp(value);
+
+  if (!timestamp) {
+    return false;
+  }
+
+  const startTimestamp = startDate ? getDateTimestamp(startDate) : 0;
+  const endTimestamp = endDate ? getDateTimestamp(endDate) : 0;
+
+  if (startTimestamp && timestamp < startTimestamp) {
+    return false;
+  }
+
+  if (endTimestamp && timestamp > endTimestamp) {
+    return false;
+  }
+
+  return true;
+}
+
 function getCurrentMonthKey() {
   const date = new Date();
 
@@ -412,6 +433,9 @@ export default function ReportsPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState('');
   const [showPrintOptions, setShowPrintOptions] = useState(false);
   const [printSections, setPrintSections] = useState<PrintSections>(
     DEFAULT_PRINT_SECTIONS
@@ -485,25 +509,66 @@ export default function ReportsPage() {
     return Array.from(months).sort().reverse();
   }, [orders, financial]);
 
-  const filteredOrders = useMemo(() => {
-    if (!selectedMonth) {
-      return orders;
-    }
+  const usingCustomPeriod = Boolean(startDate || endDate);
 
-    return orders.filter(
-      (order) => getMonthKey(getOrderReportDate(order)) === selectedMonth
-    );
-  }, [orders, selectedMonth]);
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const reportDate = getOrderReportDate(order);
+
+      const matchesPeriod = usingCustomPeriod
+        ? isDateInsideRange(reportDate, startDate, endDate)
+        : !selectedMonth || getMonthKey(reportDate) === selectedMonth;
+
+      const matchesClient =
+        !selectedClientId ||
+        String(order?.clientId || order?.client?.id || '') === selectedClientId;
+
+      return matchesPeriod && matchesClient;
+    });
+  }, [orders, selectedMonth, startDate, endDate, selectedClientId, usingCustomPeriod]);
 
   const filteredFinancial = useMemo(() => {
-    if (!selectedMonth) {
-      return financial;
+    const periodFiltered = financial.filter((item) => {
+      const reportDate = getFinancialReportDate(item, orders);
+
+      return usingCustomPeriod
+        ? isDateInsideRange(reportDate, startDate, endDate)
+        : !selectedMonth || getMonthKey(reportDate) === selectedMonth;
+    });
+
+    if (!selectedClientId) {
+      return periodFiltered;
     }
 
-    return financial.filter(
-      (item) => getMonthKey(getFinancialReportDate(item, orders)) === selectedMonth
-    );
-  }, [financial, orders, selectedMonth]);
+    const selectedOrderIds = filteredOrders
+      .map((order) => String(order?.id || ''))
+      .filter(Boolean);
+
+    return periodFiltered.filter((item) => {
+      const description = String(item?.description || '');
+      return selectedOrderIds.some((orderId) => description.includes(orderId));
+    });
+  }, [financial, orders, selectedMonth, startDate, endDate, selectedClientId, usingCustomPeriod, filteredOrders]);
+
+  const selectedClient = clients.find(
+    (client) => String(client?.id || '') === selectedClientId
+  );
+
+  function getActivePeriodLabel() {
+    if (usingCustomPeriod) {
+      if (startDate && endDate) {
+        return `${formatReportDate(startDate)} até ${formatReportDate(endDate)}`;
+      }
+
+      if (startDate) {
+        return `A partir de ${formatReportDate(startDate)}`;
+      }
+
+      return `Até ${formatReportDate(endDate)}`;
+    }
+
+    return getMonthName(selectedMonth);
+  }
 
   const totals = useMemo(() => {
     const revenue = filteredFinancial
@@ -1052,10 +1117,10 @@ export default function ReportsPage() {
 
         <PremiumPanel
           title="Filtro do relatório"
-          description="Escolha o mês desejado ou veja todos os meses."
+          description="Escolha um mês ou informe um período exato, como do dia 12 ao dia 31."
           icon={CalendarDays}
         >
-          <div className="grid items-end gap-4 md:grid-cols-[1fr_auto_auto_auto_auto]">
+          <div className="grid items-end gap-4 xl:grid-cols-4">
             <div>
               <label className="mb-2 block text-sm font-black text-yellow-200">
                 Mês do relatório
@@ -1063,7 +1128,11 @@ export default function ReportsPage() {
 
               <select
                 value={selectedMonth}
-                onChange={(event) => setSelectedMonth(event.target.value)}
+                onChange={(event) => {
+                  setSelectedMonth(event.target.value);
+                  setStartDate('');
+                  setEndDate('');
+                }}
                 className={inputClass}
               >
                 <option value="">Todos os meses</option>
@@ -1076,8 +1145,58 @@ export default function ReportsPage() {
               </select>
             </div>
 
+            <div>
+              <label className="mb-2 block text-sm font-black text-yellow-200">
+                Data inicial
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-black text-yellow-200">
+                Data final
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-black text-yellow-200">
+                Cliente (opcional)
+              </label>
+              <select
+                value={selectedClientId}
+                onChange={(event) => setSelectedClientId(event.target.value)}
+                className={inputClass}
+              >
+                <option value="">Todos os clientes</option>
+                {[...clients]
+                  .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'pt-BR'))
+                  .map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name} {client.phone ? `- ${client.phone}` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <button
-              onClick={() => setSelectedMonth(changeMonth(selectedMonth || getCurrentMonthKey(), -1))}
+              onClick={() => {
+                setSelectedMonth(changeMonth(selectedMonth || getCurrentMonthKey(), -1));
+                setStartDate('');
+                setEndDate('');
+              }}
               className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
             >
               <ChevronLeft size={18} />
@@ -1085,7 +1204,11 @@ export default function ReportsPage() {
             </button>
 
             <button
-              onClick={() => setSelectedMonth(getCurrentMonthKey())}
+              onClick={() => {
+                setSelectedMonth(getCurrentMonthKey());
+                setStartDate('');
+                setEndDate('');
+              }}
               className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
             >
               <RefreshCcw size={18} />
@@ -1093,11 +1216,26 @@ export default function ReportsPage() {
             </button>
 
             <button
-              onClick={() => setSelectedMonth(changeMonth(selectedMonth || getCurrentMonthKey(), 1))}
+              onClick={() => {
+                setSelectedMonth(changeMonth(selectedMonth || getCurrentMonthKey(), 1));
+                setStartDate('');
+                setEndDate('');
+              }}
               className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/15 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
             >
               Próximo mês
               <ChevronRight size={18} />
+            </button>
+
+            <button
+              onClick={() => {
+                setStartDate('');
+                setEndDate('');
+                setSelectedClientId('');
+              }}
+              className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-700 bg-black/45 px-5 py-3 font-black text-zinc-300 transition hover:border-yellow-400/35 hover:text-yellow-400"
+            >
+              Limpar filtros
             </button>
 
             <button
@@ -1112,12 +1250,18 @@ export default function ReportsPage() {
           <p className="mt-4 text-zinc-500">
             Mostrando relatório de:{' '}
             <strong className="text-yellow-400">
-              {getMonthName(selectedMonth)}
+              {getActivePeriodLabel()}
             </strong>
+            {selectedClient && (
+              <>
+                {' '}• Cliente:{' '}
+                <strong className="text-yellow-400">{selectedClient.name}</strong>
+              </>
+            )}
           </p>
 
           <p className="mt-2 text-sm text-zinc-500">
-            Os pedidos e as vendas automáticas são organizados pela data de entrega informada no pedido.
+            Os pedidos e as vendas são organizados pela data de entrega informada no pedido. Se preencher Data inicial ou Data final, o período personalizado substitui o filtro mensal.
           </p>
         </PremiumPanel>
 
@@ -1160,7 +1304,7 @@ export default function ReportsPage() {
 
         <div className="mb-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           <ReportCard title="Pedidos" value={filteredOrders.length} icon={ClipboardList} />
-          <ReportCard title="Clientes" value={clients.length} icon={Users} />
+          <ReportCard title="Clientes no período" value={new Set(filteredOrders.map((order) => order.clientId || order.client?.id || order.client?.name).filter(Boolean)).size} icon={Users} />
           <ReportCard title="Produtos" value={products.length} icon={Package} />
           <ReportCard title="Estoque baixo" value={totals.lowStock} icon={AlertTriangle} tone={totals.lowStock > 0 ? 'red' : 'yellow'} />
         </div>
@@ -1211,7 +1355,7 @@ export default function ReportsPage() {
                     Escolha o que vai aparecer no relatório
                   </h2>
                   <p className="mt-2 text-sm font-medium text-zinc-500">
-                    O mês continua sendo {getMonthName(selectedMonth)}. Você pode usar uma opção rápida ou montar um relatório personalizado.
+                    O período selecionado é {getActivePeriodLabel()}. Você pode usar uma opção rápida ou montar um relatório personalizado.
                   </p>
                 </div>
 
@@ -1356,8 +1500,14 @@ export default function ReportsPage() {
             </p>
 
             <p className="text-zinc-500">
-              Período: {getMonthName(selectedMonth)}
+              Período: {getActivePeriodLabel()}
             </p>
+
+            {selectedClient && (
+              <p className="text-zinc-500">
+                Cliente: {selectedClient.name}
+              </p>
+            )}
 
             <p className="text-zinc-500">
               Gerado em {new Date().toLocaleString('pt-BR')}
@@ -1414,8 +1564,8 @@ export default function ReportsPage() {
           </div>
 
           <div className="print-card border border-zinc-300 rounded-2xl p-4">
-            <p className="print-card-title text-zinc-500 font-bold">Clientes cadastrados</p>
-            <p className="print-card-value text-2xl font-black">{clients.length}</p>
+            <p className="print-card-title text-zinc-500 font-bold">Clientes no período</p>
+            <p className="print-card-value text-2xl font-black">{new Set(filteredOrders.map((order) => order.clientId || order.client?.id || order.client?.name).filter(Boolean)).size}</p>
           </div>
 
           <div className="print-card border border-zinc-300 rounded-2xl p-4">

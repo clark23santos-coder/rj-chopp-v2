@@ -39,59 +39,6 @@ function formatMoney(value: any) {
   }).format(Number(value || 0));
 }
 
-function normalizeText(value: any) {
-  return String(value || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s,.-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function getProductSearchText(product: any) {
-  const salePrice = Number(product.salePrice || 0);
-  const costPrice = Number(product.costPrice || 0);
-
-  const fullText = [
-    product.name,
-    product.category,
-    product.brand,
-    product.unit,
-    product.stock,
-    product.minimumStock,
-    product.costPrice,
-    product.salePrice,
-    formatMoney(costPrice),
-    formatMoney(salePrice),
-    salePrice.toFixed(2),
-    salePrice.toFixed(2).replace('.', ','),
-    costPrice.toFixed(2),
-    costPrice.toFixed(2).replace('.', ','),
-  ]
-    .filter((item) => item !== null && item !== undefined && item !== '')
-    .join(' ');
-
-  return normalizeText(fullText);
-}
-
-function productMatchesSearch(product: any, search: string) {
-  const normalizedSearch = normalizeText(search);
-
-  if (!normalizedSearch) {
-    return true;
-  }
-
-  const productText = getProductSearchText(product);
-
-  const searchWords = normalizedSearch
-    .split(' ')
-    .map((word) => word.trim())
-    .filter(Boolean);
-
-  return searchWords.every((word) => productText.includes(word));
-}
-
 function PremiumCard({ title, value, icon: Icon, tone = 'yellow' }: any) {
   const toneClass =
     tone === 'red'
@@ -277,7 +224,13 @@ export default function ProductsPage() {
   }
 
   const filteredProducts = products.filter((product) => {
-    return productMatchesSearch(product, search);
+    const text = search.toLowerCase();
+
+    return (
+      product.name?.toLowerCase().includes(text) ||
+      product.category?.toLowerCase().includes(text) ||
+      product.brand?.toLowerCase().includes(text)
+    );
   });
 
   const totals = useMemo(() => {
@@ -321,7 +274,7 @@ export default function ProductsPage() {
         <PremiumCard title="Equipamentos" value={totals.equipment} icon={Beer} />
       </div>
 
-      <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_auto_auto_auto]">
+      <div className="mb-8 grid gap-4 xl:grid-cols-[minmax(260px,1fr)_repeat(5,auto)]">
         <div className="relative">
           <Search
             size={20}
@@ -329,7 +282,7 @@ export default function ProductsPage() {
           />
 
           <input
-            placeholder="Busca inteligente: agua garoto com gas, coca zero, heineken lata..."
+            placeholder="Pesquisar produto, marca ou categoria..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className={`${inputClass} pl-12`}
@@ -380,6 +333,44 @@ export default function ProductsPage() {
         >
           <Plus size={20} />
           Cilindro
+        </button>
+
+        <button
+          onClick={() =>
+            openNewProduct({
+              name: 'Casco 30L',
+              brand: 'RJ Chopp',
+              category: 'Casco',
+              unit: 'UNIDADE',
+              stock: 0,
+              minimumStock: 0,
+              costPrice: 0,
+              salePrice: 0,
+            })
+          }
+          className="flex items-center justify-center gap-2 rounded-2xl border border-orange-500/25 bg-orange-500/15 px-6 py-3 font-black text-orange-300 transition hover:bg-orange-500 hover:text-white"
+        >
+          <Plus size={20} />
+          Casco 30L
+        </button>
+
+        <button
+          onClick={() =>
+            openNewProduct({
+              name: 'Casco 50L',
+              brand: 'RJ Chopp',
+              category: 'Casco',
+              unit: 'UNIDADE',
+              stock: 0,
+              minimumStock: 0,
+              costPrice: 0,
+              salePrice: 0,
+            })
+          }
+          className="flex items-center justify-center gap-2 rounded-2xl border border-orange-500/25 bg-orange-500/15 px-6 py-3 font-black text-orange-300 transition hover:bg-orange-500 hover:text-white"
+        >
+          <Plus size={20} />
+          Casco 50L
         </button>
       </div>
 

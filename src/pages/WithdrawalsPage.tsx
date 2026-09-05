@@ -104,6 +104,34 @@ function getToday() {
   return new Date().toISOString().split('T')[0];
 }
 
+function getMonthKey(value: any) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(`${String(value).slice(0, 10)}T12:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getMonthName(monthKey: string) {
+  if (!monthKey) {
+    return 'Todos os meses';
+  }
+
+  const [year, month] = monthKey.split('-');
+  const date = new Date(Number(year), Number(month) - 1, 1);
+
+  return date.toLocaleDateString('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 function isLate(date: string, status: string) {
   if (!date || status === 'RETIRADO') {
     return false;
@@ -137,6 +165,7 @@ export default function WithdrawalsPage() {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const [confirmingWithdrawal, setConfirmingWithdrawal] = useState<any>(null);
@@ -329,16 +358,22 @@ export default function WithdrawalsPage() {
 
   async function ensureCascoProduct(row: any) {
     const size = String(row?.barrelSize || getBarrelSize(row?.name) || '').toUpperCase();
-    const originalName = String(row?.name || 'Barril').trim();
-    const cascoName = size
-      ? `Casco ${size} - ${originalName}`
-      : `Casco - ${originalName}`;
+    const cascoName = size ? `Casco ${size}` : 'Casco';
     const targetName = normalizeText(cascoName);
 
     const found = products.find((product) => {
       const productName = normalizeText(product?.name || '');
       const category = normalizeText(product?.category || '');
-      return productName === targetName || (category.includes('casco') && productName === targetName);
+
+      if (!category.includes('casco') && !productName.includes('casco')) {
+        return false;
+      }
+
+      if (!size) {
+        return productName === targetName;
+      }
+
+      return productName === targetName || productName.includes(normalizeText(size));
     });
 
     if (found) {
@@ -350,7 +385,7 @@ export default function WithdrawalsPage() {
       {
         name: cascoName,
         category: 'Casco',
-        brand: row?.brand || 'RJ Chopp',
+        brand: 'RJ Chopp',
         unit: 'UNIDADE',
         stock: 0,
         minimumStock: 0,
@@ -654,6 +689,21 @@ export default function WithdrawalsPage() {
     });
   }
 
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+
+    withdrawals.forEach((item) => {
+      const key = getMonthKey(item.pickupDate || item.deliveryDate || item.createdAt);
+      if (key) {
+        months.add(key);
+      }
+    });
+
+    months.add(getMonthKey(getToday()));
+
+    return Array.from(months).sort().reverse();
+  }, [withdrawals]);
+
   const filteredWithdrawals = withdrawals.filter((item) => {
     const text = search.toLowerCase();
 
@@ -671,7 +721,11 @@ export default function WithdrawalsPage() {
       (statusFilter === 'PENDENTE' && item.status !== 'RETIRADO') ||
       (statusFilter === 'RETIRADO' && item.status === 'RETIRADO');
 
-    return matchesSearch && matchesStatus;
+    const matchesMonth =
+      !selectedMonth ||
+      getMonthKey(item.pickupDate || item.deliveryDate || item.createdAt) === selectedMonth;
+
+    return matchesSearch && matchesStatus && matchesMonth;
   });
 
   const pending = useMemo(() => {
@@ -739,7 +793,7 @@ export default function WithdrawalsPage() {
         <Card title="Retiradas feitas" value={finished.length} />
       </div>
 
-      <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_220px_auto]">
+      <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_220px_220px_auto]">
         <div className="relative">
           <Search
             size={20}
@@ -764,6 +818,19 @@ export default function WithdrawalsPage() {
           <option value="HOJE">Buscar hoje</option>
           <option value="PENDENTE">Pendentes</option>
           <option value="RETIRADO">Retiradas feitas</option>
+        </select>
+
+        <select
+          value={selectedMonth}
+          onChange={(event) => setSelectedMonth(event.target.value)}
+          className={inputClass}
+        >
+          <option value="">Todos os meses</option>
+          {availableMonths.map((month) => (
+            <option key={month} value={month}>
+              {getMonthName(month)}
+            </option>
+          ))}
         </select>
 
         <button
